@@ -1,5 +1,7 @@
 node_modules/
 dist/
+.tools/
+*.zip
 .env
 .env.*
 *.log
