@@ -39,6 +39,7 @@ const emptyMaterial: MaterialInputType = {
 
 export default function App() {
   const [step, setStep] = useState<AppStep>('home');
+  const [visitedSteps, setVisitedSteps] = useState<AppStep[]>([]);
   const [material, setMaterial] = useState<MaterialInputType>(emptyMaterial);
   const [knowledgePoints, setKnowledgePoints] = useState<KnowledgePoint[]>([]);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -49,6 +50,13 @@ export default function App() {
   const [reinforcementQuiz, setReinforcementQuiz] = useState<ReinforcementQuestion[]>([]);
   const [loadingLabel, setLoadingLabel] = useState('');
 
+  const goToStep = (nextStep: AppStep) => {
+    setStep(nextStep);
+    if (nextStep !== 'home') {
+      setVisitedSteps((current) => (current.includes(nextStep) ? current : [...current, nextStep]));
+    }
+  };
+
   const runWithLoading = async (label: string, task: () => Promise<void>) => {
     setLoadingLabel(label);
     await new Promise((resolve) => window.setTimeout(resolve, 360));
@@ -58,23 +66,24 @@ export default function App() {
   };
 
   const reset = () => {
-    setStep('home');
-    setMaterial(emptyMaterial);
+      goToStep('home');
+      setMaterial(emptyMaterial);
     setKnowledgePoints([]);
     setQuestions([]);
     setAnswers([]);
     setResult(null);
     setDiagnosis([]);
     setReviewPlan([]);
-    setReinforcementQuiz([]);
-    setLoadingLabel('');
+      setReinforcementQuiz([]);
+      setLoadingLabel('');
+      setVisitedSteps([]);
   };
 
   const handleAnalyze = () =>
     runWithLoading('AI 正在提取知识点...', async () => {
       const points = await extractKnowledgePoints(material.content);
       setKnowledgePoints(points);
-      setStep('knowledge');
+      goToStep('knowledge');
     });
 
   const handleGenerateQuiz = () =>
@@ -82,14 +91,14 @@ export default function App() {
       const generated = await generateQuiz(knowledgePoints);
       setQuestions(generated);
       setAnswers([]);
-      setStep('quiz');
+      goToStep('quiz');
     });
 
   const handleSubmitQuiz = () =>
     runWithLoading('系统正在评分并分析薄弱点...', async () => {
       const evaluated = await evaluateAnswers(questions, answers, knowledgePoints);
       setResult(evaluated);
-      setStep('result');
+      goToStep('result');
     });
 
   const handleDiagnosis = () =>
@@ -97,7 +106,7 @@ export default function App() {
       if (!result) return;
       const generated = await generateDiagnosis(result, questions, answers);
       setDiagnosis(generated);
-      setStep('diagnosis');
+      goToStep('diagnosis');
     });
 
   const handleReviewPlan = () =>
@@ -105,7 +114,7 @@ export default function App() {
       if (!result) return;
       const generated = await generateReviewPlan(diagnosis, result.weakKnowledgePoints);
       setReviewPlan(generated);
-      setStep('plan');
+      goToStep('plan');
     });
 
   const handleReinforcement = () =>
@@ -113,13 +122,13 @@ export default function App() {
       if (!result) return;
       const generated = await generateReinforcementQuiz(result.weakKnowledgePoints);
       setReinforcementQuiz(generated);
-      setStep('reinforcement');
+      goToStep('reinforcement');
     });
 
   return (
     <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_34%),linear-gradient(135deg,_#07111f_0%,_#0f172a_48%,_#111827_100%)]">
       <Header onReset={reset} />
-      <StepIndicator currentStep={step} />
+      <StepIndicator currentStep={step} visitedSteps={visitedSteps} onStepClick={goToStep} />
       {loadingLabel ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
           <div className="glass-panel rounded-lg px-8 py-6 text-center">
@@ -129,15 +138,15 @@ export default function App() {
         </div>
       ) : null}
 
-      {step === 'home' ? <HeroSection onStart={() => setStep('material')} /> : null}
+      {step === 'home' ? <HeroSection onStart={() => goToStep('material')} /> : null}
       {step === 'material' ? <MaterialInput material={material} setMaterial={setMaterial} onAnalyze={handleAnalyze} /> : null}
       {step === 'knowledge' ? <KnowledgePointList knowledgePoints={knowledgePoints} onGenerateQuiz={handleGenerateQuiz} /> : null}
-      {step === 'quiz' ? <QuizGenerator questions={questions} knowledgePoints={knowledgePoints} onStart={() => setStep('taking')} /> : null}
+      {step === 'quiz' ? <QuizGenerator questions={questions} knowledgePoints={knowledgePoints} onStart={() => goToStep('taking')} /> : null}
       {step === 'taking' ? <QuizTaking questions={questions} answers={answers} setAnswers={setAnswers} onSubmit={handleSubmitQuiz} /> : null}
       {step === 'result' && result ? <ResultSummary result={result} questions={questions} knowledgePoints={knowledgePoints} onDiagnosis={handleDiagnosis} /> : null}
       {step === 'diagnosis' ? <DiagnosisPanel diagnosis={diagnosis} onGeneratePlan={handleReviewPlan} /> : null}
       {step === 'plan' ? <ReviewPlan reviewPlan={reviewPlan} onGenerateReinforcement={handleReinforcement} /> : null}
-      {step === 'reinforcement' ? <ReinforcementQuiz reinforcementQuiz={reinforcementQuiz} onReport={() => setStep('report')} /> : null}
+      {step === 'reinforcement' ? <ReinforcementQuiz reinforcementQuiz={reinforcementQuiz} onReport={() => goToStep('report')} /> : null}
       {step === 'report' && result ? (
         <ReportExport
           material={material}

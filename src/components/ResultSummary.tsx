@@ -59,7 +59,13 @@ export default function ResultSummary({ result, questions, knowledgePoints, onDi
                 return (
                   <div key={wrong.questionId} className="rounded-lg bg-white/6 p-4">
                     <p className="font-medium leading-6 text-white">{question?.question}</p>
-                    <p className="mt-2 text-sm text-slate-400">知识点：{question ? getKnowledgeTitle(question.knowledgePointId) : '未知'}；得分：{wrong.score}/{wrong.maxScore}</p>
+                    <div className="mt-3 grid gap-2 text-sm text-slate-300">
+                      <p>用户答案：<span className="text-rose-100">{wrong.userAnswer || '未作答'}</span></p>
+                      <p>正确答案：<span className="text-emerald-100">{question?.answer}</span></p>
+                      <p>答案解析：<span className="text-slate-200">{question?.explanation}</span></p>
+                      <p>对应知识点：<span className="text-cyan-100">{question ? getKnowledgeTitle(question.knowledgePointId) : '未知'}</span></p>
+                      <p>得分情况：<span className="text-amber-100">{wrong.score}/{wrong.maxScore}</span></p>
+                    </div>
                   </div>
                 );
               })

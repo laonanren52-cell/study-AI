@@ -4,6 +4,7 @@ dist/
 *.zip
 .env
 .env.*
+!.env.example
 *.log
 *.local
 npm-debug.log*

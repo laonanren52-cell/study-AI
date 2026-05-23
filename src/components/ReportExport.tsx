@@ -1,4 +1,4 @@
-import { Check, Clipboard, Download, FileText } from 'lucide-react';
+import { Check, Clipboard, Download, FileText, Printer } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type {
   DiagnosisItem,
@@ -53,7 +53,11 @@ export default function ReportExport(props: ReportExportProps) {
               {copied ? <Check className="h-5 w-5 text-emerald-200" /> : <Clipboard className="h-5 w-5" />}
               {copied ? '已复制' : '复制到剪贴板'}
             </button>
-            <button disabled className="rounded-lg border border-white/10 px-5 py-3 text-slate-500">导出 Word / PDF 后续支持</button>
+            <button onClick={() => window.print()} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 px-5 py-3 text-slate-200 hover:border-cyan-300/50">
+              <Printer className="h-5 w-5" />
+              打印 / 导出 PDF
+            </button>
+            <button disabled className="rounded-lg border border-white/10 px-5 py-3 text-slate-500">导出 Word 后续支持</button>
           </div>
         </div>
 

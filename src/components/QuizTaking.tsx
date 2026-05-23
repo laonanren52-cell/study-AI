@@ -1,4 +1,4 @@
-import { Send } from 'lucide-react';
+import { CheckCircle2, Send, Wand2, XCircle } from 'lucide-react';
 import type { QuizQuestion, UserAnswer } from '../types';
 
 interface QuizTakingProps {
@@ -21,6 +21,37 @@ export default function QuizTaking({ questions, answers, setAnswers, onSubmit }:
     setAnswers([...next, { questionId, answer }]);
   };
   const answeredCount = questions.filter((question) => answerMap.get(question.id)?.trim()).length;
+  const unansweredCount = questions.length - answeredCount;
+
+  const submitWithConfirm = () => {
+    if (unansweredCount > 0 && !window.confirm(`还有 ${unansweredCount} 道题未作答，是否继续提交？`)) return;
+    onSubmit();
+  };
+
+  const fillExcellentPaper = () => {
+    setAnswers(questions.map((question) => ({ questionId: question.id, answer: question.answer })));
+  };
+
+  const fillWrongPaper = () => {
+    const wrongTarget = Math.min(4, Math.max(2, Math.floor(questions.length / 3)));
+    setAnswers(
+      questions.map((question, index) => {
+        if (index < wrongTarget) {
+          if (question.type === 'single') {
+            return {
+              questionId: question.id,
+              answer: question.options?.find((option) => option !== question.answer) ?? '故意选错',
+            };
+          }
+          if (question.type === 'judge') {
+            return { questionId: question.id, answer: question.answer === '正确' ? '错误' : '正确' };
+          }
+          return { questionId: question.id, answer: '只记得名称，但没有写出核心含义和考查方式。' };
+        }
+        return { questionId: question.id, answer: question.answer };
+      }),
+    );
+  };
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-10">
@@ -29,14 +60,29 @@ export default function QuizTaking({ questions, answers, setAnswers, onSubmit }:
           <h2 className="text-3xl font-semibold text-white">在线答题</h2>
           <p className="mt-2 text-slate-400">已作答 {answeredCount}/{questions.length} 题，提交后系统将自动评分并识别薄弱知识点。</p>
         </div>
-        <button
-          onClick={onSubmit}
-          disabled={answeredCount < questions.length}
-          className="focus-ring inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <Send className="h-5 w-5" />
-          提交测评
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={fillExcellentPaper} className="focus-ring inline-flex items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 hover:bg-emerald-400/18">
+            <CheckCircle2 className="h-4 w-4" />
+            一键生成优秀答卷
+          </button>
+          <button onClick={fillWrongPaper} className="focus-ring inline-flex items-center gap-2 rounded-lg border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-100 hover:bg-amber-400/18">
+            <XCircle className="h-4 w-4" />
+            一键生成含错答卷
+          </button>
+          <button
+            onClick={submitWithConfirm}
+            className="focus-ring inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-200"
+          >
+            <Send className="h-5 w-5" />
+            提交测评
+          </button>
+        </div>
+      </div>
+      <div className="mb-5 rounded-lg border border-cyan-300/15 bg-cyan-300/8 p-4 text-sm leading-6 text-cyan-50">
+        <div className="flex items-start gap-2">
+          <Wand2 className="mt-0.5 h-4 w-4 shrink-0" />
+          路演提示：优秀答卷用于展示高分报告，含错答卷会制造 2-4 个错误，便于展示错因诊断、薄弱点排行和个性化复习计划。
+        </div>
       </div>
 
       <div className="space-y-5">
