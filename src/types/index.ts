@@ -1,6 +1,7 @@
 export type Importance = '高' | '中' | '低';
 export type Difficulty = '简单' | '中等' | '较难';
 export type QuestionType = 'single' | 'judge' | 'short';
+export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx';
 export type AppStep =
   | 'home'
   | 'material'
@@ -17,6 +18,12 @@ export interface MaterialInput {
   title: string;
   content: string;
   sourceType: 'text' | 'file' | 'sample';
+  fileType?: MaterialFileType;
+  fileName?: string;
+  fileSize?: number;
+  wordCount?: number;
+  pageCount?: number;
+  slideCount?: number;
 }
 
 export interface KnowledgePoint {

@@ -7,6 +7,33 @@ import type {
   ReinforcementQuestion,
   ReviewPlanDay,
 } from '../types';
+import { formatFileSize } from '../utils/textClean';
+
+const fileTypeLabel = {
+  txt: 'TXT',
+  pdf: 'PDF',
+  docx: 'Word .docx',
+  pptx: 'PPT .pptx',
+};
+
+const sourceLabel = {
+  sample: '示例资料',
+  file: '文件上传',
+  text: '文本粘贴',
+};
+
+const buildMaterialSourceLines = (material: MaterialInput) => {
+  const lines = [`- 输入方式：${sourceLabel[material.sourceType]}`];
+  if (material.fileName) lines.push(`- 文件名：${material.fileName}`);
+  if (material.fileType) lines.push(`- 文件类型：${fileTypeLabel[material.fileType]}`);
+  if (typeof material.fileSize === 'number') lines.push(`- 文件大小：${formatFileSize(material.fileSize)}`);
+  if (typeof material.wordCount === 'number') lines.push(`- 提取字数：${material.wordCount}`);
+  if (typeof material.pageCount === 'number') lines.push(`- 页数：${material.pageCount}`);
+  if (typeof material.slideCount === 'number') lines.push(`- PPT 页数：${material.slideCount}`);
+  if (material.sourceType === 'text') lines.push('- 来源说明：用户手动粘贴或编辑的文本内容');
+  if (material.sourceType === 'sample') lines.push('- 来源说明：系统内置《人工智能基础概念》示例资料');
+  return lines.join('\n');
+};
 
 export const generateLearningReport = (params: {
   material: MaterialInput;
@@ -25,7 +52,10 @@ export const generateLearningReport = (params: {
 ## 学习资料
 
 - 标题：${material.title}
-- 输入方式：${material.sourceType === 'sample' ? '示例资料' : material.sourceType === 'file' ? '文件上传' : '文本粘贴'}
+
+## 学习资料来源
+
+${buildMaterialSourceLines(material)}
 
 ## 提取的知识点
 

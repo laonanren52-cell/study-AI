@@ -24,21 +24,26 @@ const realAiPlaceholder = async () => {
 };
 
 const signalKeywords = ['是', '包括', '分为', '特点', '作用', '原因', '影响', '应用', '区别', '流程', '原则'];
+const lowValuePatterns = [/^第\s*\d+\s*页[:：]?$/, /^目录$/, /^谢谢观看$/, /^THANKS?$/i, /^Q\s*&\s*A$/i, /^页码$/];
+const isLowValueSentence = (sentence: string) => lowValuePatterns.some((pattern) => pattern.test(sentence.trim()));
 const splitText = (text: string) =>
   text
     .replace(/\r/g, '\n')
     .split(/[\n。！？!?；;]+/)
     .map((item) => item.trim())
-    .filter((item) => item.length >= 8);
+    .map((item) => item.replace(/^第\s*\d+\s*页[:：]?\s*/, '').trim())
+    .filter((item) => item.length >= 6 && !isLowValueSentence(item));
 
 const cleanTitle = (sentence: string, index: number) => {
   const beforeDefinition = sentence.split(/是|包括|分为|具有|指|：|:/)[0]?.trim();
   const candidate = beforeDefinition || sentence;
   return candidate
+    .replace(/^第\s*\d+\s*页[:：]?/, '')
     .replace(/^(首先|其次|最后|因此|其中|例如|通过|对于|关于)/, '')
     .replace(/[，,].*$/, '')
     .slice(0, 16)
-    .trim() || `核心知识点 ${index + 1}`;
+    .trim()
+    .replace(/[^\u4e00-\u9fa5A-Za-z0-9（）()《》-]/g, '') || `核心知识点 ${index + 1}`;
 };
 
 const inferImportance = (sentence: string, index: number): Importance => {
@@ -126,7 +131,8 @@ export const extractKnowledgePoints = async (materialText: string): Promise<Know
   }
 
   return candidates.slice(0, Math.max(4, Math.min(8, candidates.length))).map((sentence, index) => {
-    const title = cleanTitle(sentence, index);
+    const rawTitle = cleanTitle(sentence, index);
+    const title = rawTitle.length < 2 ? `核心知识点 ${index + 1}` : rawTitle;
     const importance = inferImportance(sentence, index);
     return {
       id: `kp-${index + 1}`,
@@ -145,8 +151,11 @@ export const extractKnowledgePoints = async (materialText: string): Promise<Know
 const difficultyByIndex = (index: number): QuizQuestion['difficulty'] => (index < 3 ? '简单' : index < 7 ? '中等' : '较难');
 
 const uniqueDistractors = (knowledgePoints: KnowledgePoint[], current: KnowledgePoint) => {
-  const others = knowledgePoints.filter((item) => item.id !== current.id).map((item) => item.title);
-  const generic = ['资料背景信息', '非核心拓展概念', '无关干扰项', '临时记忆点'];
+  const others = knowledgePoints
+    .filter((item) => item.id !== current.id)
+    .map((item) => item.title)
+    .filter((title) => title.length >= 2);
+  const generic = ['相关背景概念', '材料中的辅助说明', '延伸应用场景', '复习补充内容'];
   return [...others, ...generic].slice(0, 3);
 };
 
