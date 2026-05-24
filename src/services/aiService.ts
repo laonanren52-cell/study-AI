@@ -6,6 +6,7 @@ import type {
   KnowledgePoint,
   QuizQuestion,
   QuizResult,
+  QuizSettings,
   ReinforcementQuestion,
   ReviewPlanDay,
   UserAnswer,
@@ -321,7 +322,8 @@ const enrichQuestion = (question: QuizQuestion, point: KnowledgePoint, pattern: 
   commonMistake: question.commonMistake || point.commonMistakes?.[0] || '只记结论，忽略条件、步骤或材料依据。',
   scoringRubric: question.scoringRubric?.length ? question.scoringRubric : defaultRubricFor(point, pattern),
   solutionSteps: question.solutionSteps?.length ? question.solutionSteps : defaultStepsFor(point, pattern),
-  answerInputMode: question.answerInputMode || (question.type === 'short' ? 'both' : 'text'),
+  answerInputMode: question.answerInputMode || (['short', 'solution', 'material'].includes(question.type) ? 'both' : 'text'),
+  recommendedVariant: question.recommendedVariant || `围绕“${point.title}”更换条件、语境或设问方式生成同类变式。`,
 });
 
 const fallbackSingleQuestion = (point: KnowledgePoint, index: number, pattern: ExamQuestionPattern = '基础概念题'): QuizQuestion => {
@@ -432,14 +434,14 @@ const isQuizQuestion = (item: unknown): item is QuizQuestion => {
   return Boolean(value?.id && value.type && value.question && value.answer && value.explanation && value.knowledgePointId && value.difficulty);
 };
 
-const normalizeLLMQuestions = (input: unknown, knowledgePoints: KnowledgePoint[]) => {
+const normalizeLLMQuestions = (input: unknown, knowledgePoints: KnowledgePoint[], settings?: QuizSettings) => {
   const record = input as Record<string, unknown>;
   const list = Array.isArray(record?.questions) ? record.questions : [];
   return list
     .filter(isQuizQuestion)
     .map((question, index) => normalizeQuestion(question, knowledgePoints[index % knowledgePoints.length], index))
     .filter(validateQuestion)
-    .slice(0, 10);
+    .slice(0, settings?.questionCount ?? 10);
 };
 
 const buildTrigMockQuiz = (knowledgePoints: KnowledgePoint[], startIndex = 0): QuizQuestion[] => {
@@ -635,19 +637,99 @@ const improvedMockQuiz = (knowledgePoints: KnowledgePoint[], startIndex = 0) => 
   return improvedGenericMockQuiz(knowledgePoints, startIndex);
 };
 
-export const generateQuiz = async (knowledgePoints: KnowledgePoint[], materialText: string): Promise<QuizQuestion[]> => {
+const difficultyFromSettings = (index: number, total: number, settings?: QuizSettings): Difficulty => {
+  if (!settings) return difficultyByIndex(index);
+  const easyCount = Math.max(1, Math.round(total * settings.difficultyRatio.easy / 100));
+  const mediumCount = Math.max(1, Math.round(total * settings.difficultyRatio.medium / 100));
+  if (index < easyCount) return '简单';
+  if (index < easyCount + mediumCount) return '中等';
+  return '较难';
+};
+
+const convertQuestionType = (question: QuizQuestion, targetType: QuizQuestion['type'], point: KnowledgePoint, index: number): QuizQuestion => {
+  if (targetType === question.type) return question;
+  if (targetType === 'single') return question.options?.length === 4 ? { ...question, type: 'single' } : fallbackSingleQuestion(point, index);
+  if (targetType === 'judge') {
+    return withQuality(enrichQuestion({
+      ...question,
+      type: 'judge',
+      question: `${point.title}的训练必须结合材料依据、条件限制和常见误区进行判断。`,
+      options: undefined,
+      answer: '正确',
+      explanation: question.explanation || `该判断符合材料依据：${evidenceOf(point)}`,
+    }, point, '易错判断题'));
+  }
+  if (targetType === 'fill') {
+    return withQuality(enrichQuestion({
+      ...question,
+      type: 'fill',
+      question: `填空题：围绕“${point.title}”，请写出材料中最关键的公式、规则或判断依据。`,
+      options: undefined,
+      answer: point.formulas?.[0] || point.keywords?.[0] || point.title,
+      explanation: `本题考查是否能从资料中准确提取“${point.title}”的核心依据。`,
+    }, point, '基础概念题'));
+  }
+  if (targetType === 'material') {
+    return withQuality(enrichQuestion({
+      ...question,
+      type: 'material',
+      question: `材料分析题：结合资料依据“${evidenceOf(point)}”，说明“${point.title}”在题目语境下应如何判断，并指出一个常见误区。`,
+      options: undefined,
+      answer: `应先定位材料依据，再结合条件或语境判断“${point.title}”的适用方式，最后排除常见误区。`,
+      explanation: '材料分析题重在证据定位、规则应用和错误选项辨析。',
+    }, point, '材料分析题'));
+  }
+  return withQuality(enrichQuestion({
+    ...question,
+    type: targetType,
+    options: undefined,
+    question: targetType === 'solution'
+      ? `解答题：围绕“${point.title}”完成一道同类变式训练，要求写出公式/规则、条件分析、标准步骤和最终结论。`
+      : `简答题：结合资料说明“${point.title}”的考查重点、得分点和常见误区。`,
+    answer: question.answer || `围绕“${point.title}”写出材料依据、关键步骤、得分点和结论。`,
+    explanation: question.explanation || `答案必须包含材料依据、标准步骤和常见误区。`,
+  }, point, targetType === 'solution' ? '综合解答题' : '材料分析题'));
+};
+
+const applyQuizSettings = (questions: QuizQuestion[], source: KnowledgePoint[], settings?: QuizSettings): QuizQuestion[] => {
+  const targetCount = settings?.questionCount ?? 10;
+  const desiredTypes: QuizQuestion['type'][] = settings?.questionTypes?.length ? settings.questionTypes : ['single', 'judge', 'short', 'solution'];
+  const expanded = [...questions];
+  let round = 0;
+  while (expanded.length < targetCount) {
+    improvedMockQuiz(source, expanded.length + round * 10).forEach((question) => {
+      if (expanded.length < targetCount) expanded.push(question);
+    });
+    round += 1;
+    if (round > 3) break;
+  }
+
+  return expanded.slice(0, targetCount).map((question, index) => {
+    const point = source[index % source.length] || sampleKnowledgePoints[0];
+    const targetType = desiredTypes[index % desiredTypes.length];
+    const converted = convertQuestionType(question, targetType, point, index);
+    return {
+      ...converted,
+      id: `q${index + 1}`,
+      difficulty: difficultyFromSettings(index, targetCount, settings),
+      recommendedVariant: converted.recommendedVariant || `围绕“${point.title}”换条件、换语境或换数值生成同类变式。`,
+    };
+  });
+};
+
+export const generateQuiz = async (knowledgePoints: KnowledgePoint[], materialText: string, settings?: QuizSettings): Promise<QuizQuestion[]> => {
   const source = knowledgePoints.length > 0 ? knowledgePoints : sampleKnowledgePoints;
-  const prompt = buildQuizPrompt(materialText, source);
+  const prompt = buildQuizPrompt(materialText, source, settings);
   const llmResult = await callLLMJson(prompt.systemPrompt, prompt.userPrompt);
-  const llmQuestions = llmResult ? normalizeLLMQuestions(llmResult, source) : [];
+  const llmQuestions = llmResult ? normalizeLLMQuestions(llmResult, source, settings) : [];
   const mockQuestions = improvedMockQuiz(source, llmQuestions.length);
 
   const combined = [...llmQuestions];
   mockQuestions.forEach((question) => {
-    if (combined.length < 10 && !combined.some((item) => item.question === question.question)) combined.push(question);
+    if (combined.length < (settings?.questionCount ?? 10) && !combined.some((item) => item.question === question.question)) combined.push(question);
   });
 
-  return combined.slice(0, 10).map((question, index) => ({ ...question, id: `q${index + 1}` }));
+  return applyQuizSettings(combined, source, settings);
 };
 
 export const evaluateAnswers = async (
@@ -678,8 +760,12 @@ export const generateDiagnosis = async (
   return result.wrongQuestions.map((wrong, index) => {
     const question = questions.find((item) => item.id === wrong.questionId)!;
     const kp = result.byKnowledgePoint.find((item) => item.knowledgePoint.id === question.knowledgePointId)?.knowledgePoint;
-    const reasonType = question.type === 'short' ? '表达不完整' : reasonTypes[index % reasonTypes.length];
+    const reasonType = ['short', 'fill', 'solution', 'material'].includes(question.type) ? '表达不完整' : reasonTypes[index % reasonTypes.length];
     const userAnswer = answerMap.get(question.id) || '未作答';
+    const missingRubric = wrong.missingRubric?.length ? wrong.missingRubric : question.scoringRubric?.slice(0, 2) ?? ['关键得分点未命中'];
+    const commonMistake = question.commonMistake || kp?.commonMistakes?.[0] || '只看结论，没有结合条件、步骤或材料依据。';
+    const masteryStatus: DiagnosisItem['masteryStatus'] = wrong.score <= 3 ? '薄弱' : wrong.score <= 7 ? '待加强' : '已掌握';
+    const targetedSuggestion = `你在本题中主要缺少“${missingRubric.slice(0, 2).join('、')}”。建议先复盘“${kp?.title ?? '该知识点'}”的材料依据和标准步骤，再完成 3 道同类变式题，重点检查：${commonMistake}`;
     return {
       id: `diag-${question.id}`,
       questionId: question.id,
@@ -689,10 +775,10 @@ export const generateDiagnosis = async (
       reasonType,
       diagnosis: `你的答案“${userAnswer}”没有准确命中本题考查点，说明对“${kp?.title ?? '该知识点'}”的理解还不稳定。`,
       correctUnderstanding: question.explanation,
-      suggestion:
-        reasonType === '表达不完整'
-          ? '复习时先列出关键词，再用一句完整的话解释概念、材料依据和应用影响。'
-          : '重新阅读知识点说明，并用“概念定义 + 典型场景 + 易错点”的方式整理笔记。',
+      suggestion: targetedSuggestion,
+      missingRubric,
+      commonMistake,
+      masteryStatus,
     };
   });
 };
@@ -771,6 +857,7 @@ export const generateReinforcementQuiz = async (
   weakKnowledgePoints: KnowledgePoint[],
   questions: QuizQuestion[] = [],
   result?: QuizResult,
+  variantSeed = 0,
 ): Promise<ReinforcementQuestion[]> => {
   const weak = weakKnowledgePoints.length > 0 ? weakKnowledgePoints : sampleKnowledgePoints.slice(0, 3);
   const wrongQuestionMap = new Map((result?.wrongQuestions ?? []).map((item) => [item.questionId, questions.find((question) => question.id === item.questionId)]));
@@ -780,18 +867,23 @@ export const generateReinforcementQuiz = async (
   const isTrig = /三角|sin|cos|tan/.test(weak.map((item) => `${item.title}${item.description}${item.sourceEvidence}`).join('\n'));
 
   return weak.slice(0, 5).map((item, index) => {
-    const sourceQuestion = pool[index % Math.max(pool.length, 1)];
-    const pattern = sourceQuestion?.examPattern || item.examPatterns?.[index % Math.max(item.examPatterns.length, 1)] || getQuestionPatternPlan(subjectType)[index] || '变式迁移题';
+    const variantIndex = index + (variantSeed % 7);
+    const sourceQuestion = pool[variantIndex % Math.max(pool.length, 1)];
+    const pattern = sourceQuestion?.examPattern || item.examPatterns?.[variantIndex % Math.max(item.examPatterns.length, 1)] || getQuestionPatternPlan(subjectType)[variantIndex] || '变式迁移题';
     const formula = item.formulas?.[0] || (isTrig ? 'sin²α + cos²α = 1；tanα = sinα / cosα' : '资料中的关键公式/规则');
-    const trigQuestion = index % 2 === 0
+    const trigQuestion = variantIndex % 3 === 0
       ? '已知 tanα = 5/12，且 α 在第二象限，求 sinα、cosα，并写出完整步骤。'
-      : '请证明恒等式：1 - sin²α = cos²α，并说明它与同角三角函数基本关系的联系。';
+      : variantIndex % 3 === 1
+        ? '已知 tanα = -8/15，且 α 在第四象限，求 sinα、cosα，并说明如何判断正负号。'
+        : '请证明恒等式：1 - sin²α = cos²α，并说明它与同角三角函数基本关系的联系。';
     const genericQuestion = pattern === '条件辨析题'
       ? `将原题条件换成新语境：围绕“${item.title}”，判断下列表述是否符合材料依据，并说明理由。`
       : `围绕“${item.title}”完成一道同类变式题：先写考点依据，再写标准步骤，最后指出易错点。`;
-    const answer = isTrig && index % 2 === 0
+    const answer = isTrig && variantIndex % 3 === 0
       ? '设 sinα = 5k，cosα = 12k，由 sin²α + cos²α = 1 得 169k² = 1，所以 |k| = 1/13。第二象限 sinα > 0、cosα < 0，因此 sinα = 5/13，cosα = -12/13。'
-      : isTrig
+      : isTrig && variantIndex % 3 === 1
+        ? '设 sinα = -8k，cosα = 15k，由 sin²α + cos²α = 1 得 289k² = 1，所以 |k| = 1/17。第四象限 sinα < 0、cosα > 0，因此 sinα = -8/17，cosα = 15/17。'
+        : isTrig
         ? '由 sin²α + cos²α = 1 移项可得 1 - sin²α = cos²α。证明时要写清使用的是同角三角函数平方关系。'
         : `答案应包含“${item.title}”的考点依据、材料证据、条件分析和规范结论。`;
     return {

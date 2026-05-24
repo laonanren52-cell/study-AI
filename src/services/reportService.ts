@@ -15,6 +15,7 @@ const fileTypeLabel = {
   pdf: 'PDF',
   docx: 'Word .docx',
   pptx: 'PPT .pptx',
+  image: '图片',
 };
 
 const sourceLabel = {
@@ -136,6 +137,97 @@ export const downloadMarkdown = (report: LearningReport) => {
   const link = document.createElement('a');
   link.href = url;
   link.download = `${report.title}.md`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+export const downloadWordReport = async (params: {
+  material: MaterialInput;
+  knowledgePoints: KnowledgePoint[];
+  result: QuizResult;
+  diagnosis: DiagnosisItem[];
+  reviewPlan: ReviewPlanDay[];
+  reinforcementQuiz: ReinforcementQuestion[];
+}) => {
+  const { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } = await import('docx');
+  const { material, knowledgePoints, result, diagnosis, reviewPlan, reinforcementQuiz } = params;
+  const subjectType = knowledgePoints[0]?.subjectType || inferSubjectType(material.content);
+  const title = `${material.title || '学习资料'}学习报告`;
+  const tableCell = (text: string) => new TableCell({
+    children: [new Paragraph({ children: [new TextRun(String(text || '-'))] })],
+  });
+  const table = (rows: string[][]) => new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: rows.map((row) => new TableRow({ children: row.map(tableCell) })),
+  });
+
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({ text: '智学闭环', heading: HeadingLevel.TITLE }),
+          new Paragraph({ text: title, heading: HeadingLevel.HEADING_1 }),
+          new Paragraph(`生成时间：${new Date().toLocaleString('zh-CN')}`),
+          new Paragraph(`学科类型：${subjectType}`),
+          new Paragraph({ text: '一、学习资料信息', heading: HeadingLevel.HEADING_2 }),
+          table([
+            ['资料标题', material.title || '-'],
+            ['输入方式', sourceLabel[material.sourceType]],
+            ['文件名', material.fileName || '-'],
+            ['文件类型', material.fileType ? fileTypeLabel[material.fileType] : '-'],
+            ['提取字数', typeof material.wordCount === 'number' ? String(material.wordCount) : '-'],
+          ]),
+          new Paragraph({ text: '二、测评概览', heading: HeadingLevel.HEADING_2 }),
+          table([
+            ['总分', `${result.score}`],
+            ['掌握率', `${result.masteryRate}%`],
+            ['正确题数', `${result.correctCount}`],
+            ['错误题数', `${result.wrongCount}`],
+          ]),
+          new Paragraph({ text: '三、知识点掌握情况', heading: HeadingLevel.HEADING_2 }),
+          table([
+            ['知识点', '掌握率', '答对/总数'],
+            ...result.byKnowledgePoint.map((item) => [item.knowledgePoint.title, `${item.masteryRate}%`, `${item.correct}/${item.total}`]),
+          ]),
+          new Paragraph({ text: '四、错题诊断表', heading: HeadingLevel.HEADING_2 }),
+          table([
+            ['知识点', '错因类型', '缺失得分点', '复习建议'],
+            ...(diagnosis.length ? diagnosis.map((item) => [
+              item.knowledgePointTitle,
+              item.reasonType,
+              item.missingRubric?.join('；') || '-',
+              item.suggestion,
+            ]) : [['暂无明显错题', '-', '-', '继续进行迁移训练']]),
+          ]),
+          new Paragraph({ text: '五、3 天复习计划', heading: HeadingLevel.HEADING_2 }),
+          table([
+            ['天数', '今日目标', '任务清单', '预计用时'],
+            ...reviewPlan.map((day) => [
+              `第 ${day.day} 天`,
+              day.goal,
+              day.checklist?.map((item) => item.text).join('；') || day.method,
+              day.duration,
+            ]),
+          ]),
+          new Paragraph({ text: '六、强化训练任务', heading: HeadingLevel.HEADING_2 }),
+          table([
+            ['薄弱知识点', '题型', '难度', '常见误区'],
+            ...reinforcementQuiz.map((item) => [item.knowledgePointTitle, item.examPattern, item.difficulty, item.commonMistake]),
+          ]),
+          new Paragraph({ text: '七、学习建议', heading: HeadingLevel.HEADING_2 }),
+          new Paragraph('建议先复盘缺失得分点，再完成同类变式训练。数学、物理、化学类题目重点检查公式、条件和步骤；语文类题目重点检查语境、规则和材料依据。'),
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${title}.docx`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

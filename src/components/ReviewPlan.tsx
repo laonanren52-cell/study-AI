@@ -1,4 +1,5 @@
 import { CalendarDays, CheckSquare, Dumbbell } from 'lucide-react';
+import { useState } from 'react';
 import type { ReviewPlanDay } from '../types';
 
 interface ReviewPlanProps {
@@ -26,6 +27,9 @@ const ListBlock = ({ title, items, tone = 'slate' }: { title: string; items?: st
 };
 
 export default function ReviewPlan({ reviewPlan, onGenerateReinforcement }: ReviewPlanProps) {
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const toggleItem = (id: string) => setCheckedItems((current) => ({ ...current, [id]: !current[id] }));
+
   return (
     <section className="mx-auto max-w-7xl px-5 py-10">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -66,9 +70,15 @@ export default function ReviewPlan({ reviewPlan, onGenerateReinforcement }: Revi
                   <p className="mb-2 font-semibold text-slate-950">勾选清单</p>
                   <div className="space-y-2">
                     {day.checklist.map((item) => (
-                      <label key={item.id} className="flex items-start gap-2">
+                      <label key={item.id} className="flex cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={checkedItems[item.id] ?? item.done}
+                          onChange={() => toggleItem(item.id)}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                        />
                         <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
-                        <span>{item.text}</span>
+                        <span className={checkedItems[item.id] ? 'text-slate-400 line-through' : ''}>{item.text}</span>
                       </label>
                     ))}
                   </div>

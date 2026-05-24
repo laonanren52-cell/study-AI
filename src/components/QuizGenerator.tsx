@@ -13,6 +13,9 @@ const typeLabel = {
   single: '单选题',
   judge: '判断题',
   short: '简答题',
+  fill: '填空题',
+  solution: '解答题',
+  material: '材料分析题',
 };
 
 export default function QuizGenerator({ questions, knowledgePoints, aiStatus, onStart }: QuizGeneratorProps) {
@@ -57,13 +60,23 @@ export default function QuizGenerator({ questions, knowledgePoints, aiStatus, on
                     ))}
                   </div>
                 ) : null}
-                {question.sourceEvidence ? <p className="mt-3 rounded-xl bg-sky-50 p-3 text-sm leading-6 text-sky-700"><span className="font-semibold">来源依据：</span>{question.sourceEvidence}</p> : null}
+                {question.sourceEvidence ? (
+                  <details className="mt-3 rounded-xl bg-sky-50 p-3 text-sm leading-6 text-sky-700">
+                    <summary className="cursor-pointer font-semibold">来源依据</summary>
+                    <p className="mt-2">{question.sourceEvidence}</p>
+                  </details>
+                ) : null}
                 <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-                  {question.learningObjective ? <p className="rounded-xl bg-slate-50 p-3 leading-6 text-slate-600"><span className="font-semibold text-slate-900">考查目标：</span>{question.learningObjective}</p> : null}
+                  {question.learningObjective ? (
+                    <details className="rounded-xl bg-slate-50 p-3 leading-6 text-slate-600">
+                      <summary className="cursor-pointer font-semibold text-slate-900">考查目标</summary>
+                      <p className="mt-2">{question.learningObjective}</p>
+                    </details>
+                  ) : null}
                   {question.commonMistake ? <p className="rounded-xl bg-rose-50 p-3 leading-6 text-rose-700"><span className="font-semibold">常见误区：</span>{question.commonMistake}</p> : null}
                   {question.scoringRubric?.length ? <p className="rounded-xl bg-emerald-50 p-3 leading-6 text-emerald-700 md:col-span-2"><span className="font-semibold">得分点：</span>{question.scoringRubric.join('；')}</p> : null}
                 </div>
-                {typeof question.qualityScore === 'number' ? <p className="mt-2 text-xs text-slate-400">题目质量评分：{question.qualityScore}/100</p> : null}
+                {import.meta.env.DEV && typeof question.qualityScore === 'number' ? <p className="mt-2 text-xs text-slate-400">题目质量评分：{question.qualityScore}/100</p> : null}
                 <p className="mt-2 text-sm text-slate-500">解析将在提交测评后展示。</p>
               </div>
             </div>

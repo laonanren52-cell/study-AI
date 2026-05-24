@@ -1,8 +1,11 @@
 import { ArrowRight, BadgeCheck } from 'lucide-react';
-import type { KnowledgePoint } from '../types';
+import type { KnowledgePoint, QuizSettings } from '../types';
+import QuizSettingsPanel from './QuizSettingsPanel';
 
 interface KnowledgePointListProps {
   knowledgePoints: KnowledgePoint[];
+  quizSettings: QuizSettings;
+  setQuizSettings: (settings: QuizSettings) => void;
   onGenerateQuiz: () => void;
 }
 
@@ -12,7 +15,7 @@ const importanceClass = {
   低: 'bg-emerald-50 text-emerald-700 border-emerald-100',
 };
 
-export default function KnowledgePointList({ knowledgePoints, onGenerateQuiz }: KnowledgePointListProps) {
+export default function KnowledgePointList({ knowledgePoints, quizSettings, setQuizSettings, onGenerateQuiz }: KnowledgePointListProps) {
   return (
     <section className="mx-auto max-w-7xl px-5 py-10">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -22,9 +25,13 @@ export default function KnowledgePointList({ knowledgePoints, onGenerateQuiz }: 
           <p className="mt-2 text-slate-600">已从资料中抽取核心概念、掌握目标、来源依据与可能考查方式。</p>
         </div>
         <button onClick={onGenerateQuiz} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700">
-          生成测评题目
+          提交生成题目
           <ArrowRight className="h-5 w-5" />
         </button>
+      </div>
+
+      <div className="mb-6">
+        <QuizSettingsPanel settings={quizSettings} onChange={setQuizSettings} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

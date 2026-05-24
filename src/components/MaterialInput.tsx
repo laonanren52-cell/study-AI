@@ -1,10 +1,11 @@
-import { AlertCircle, FileText, FileUp, Loader2, Play, Sparkles } from 'lucide-react';
+import { AlertCircle, Camera, FileText, FileUp, ImagePlus, Loader2, Play, Sparkles, Trash2 } from 'lucide-react';
 import type { DragEvent } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { sampleMaterial, sampleMaterialTitle } from '../data/sampleMaterial';
 import { parseFileToMaterial } from '../services/fileParser';
+import { recognizeTextFromImage } from '../services/visionAnswerService';
 import type { MaterialInput as MaterialInputType } from '../types';
-import { formatFileSize } from '../utils/textClean';
+import { countWords, formatFileSize } from '../utils/textClean';
 
 interface MaterialInputProps {
   material: MaterialInputType;
@@ -12,19 +13,23 @@ interface MaterialInputProps {
   onAnalyze: () => void;
 }
 
-const supportedFormats = ['TXT 文本', 'PDF 文档', 'Word 文档 .docx', 'PPT 课件 .pptx'];
+const supportedFormats = ['TXT 文本', 'PDF 文档', 'Word 文档 .docx', 'PPT 课件 .pptx', '图片 / 拍照'];
 
 const fileTypeLabel = {
   txt: 'TXT',
   pdf: 'PDF',
   docx: 'Word .docx',
   pptx: 'PPT .pptx',
+  image: '图片',
 };
 
 export default function MaterialInput({ material, setMaterial, onAnalyze }: MaterialInputProps) {
   const [isParsingFile, setIsParsingFile] = useState(false);
+  const [isRecognizingImage, setIsRecognizingImage] = useState(false);
   const [parseError, setParseError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string>(material.imageDataUrl ?? '');
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearFileMeta = (next: MaterialInputType): MaterialInputType => ({
     title: next.title,
@@ -43,6 +48,25 @@ export default function MaterialInput({ material, setMaterial, onAnalyze }: Mate
   const handleFile = async (file?: File) => {
     if (!file) return;
     setParseError('');
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const imageDataUrl = String(reader.result || '');
+        setImagePreview(imageDataUrl);
+        setMaterial({
+          ...material,
+          title: material.title || file.name.replace(/\.[^.]+$/, ''),
+          sourceType: 'file',
+          fileType: 'image',
+          fileName: file.name,
+          fileSize: file.size,
+          imageDataUrl,
+        });
+      };
+      reader.readAsDataURL(file);
+      setIsDragging(false);
+      return;
+    }
     setIsParsingFile(true);
     try {
       const parsed = await parseFileToMaterial(file);
@@ -63,6 +87,33 @@ export default function MaterialInput({ material, setMaterial, onAnalyze }: Mate
       setIsParsingFile(false);
       setIsDragging(false);
     }
+  };
+
+  const recognizeImageMaterial = async () => {
+    if (!imagePreview) return;
+    setParseError('');
+    setIsRecognizingImage(true);
+    try {
+      const recognizedText = await recognizeTextFromImage(imagePreview);
+      const nextContent = [material.content, recognizedText].filter(Boolean).join('\n\n');
+      setMaterial({
+        ...material,
+        content: nextContent,
+        sourceType: 'file',
+        fileType: 'image',
+        imageDataUrl: imagePreview,
+        wordCount: countWords(nextContent),
+      });
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : '图片文字识别失败，请手动输入或切换支持视觉能力的模型。');
+    } finally {
+      setIsRecognizingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    setImagePreview('');
+    setMaterial(clearFileMeta({ ...material, fileType: undefined, imageDataUrl: undefined, sourceType: material.content ? 'text' : 'text' }));
   };
 
   const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
@@ -93,6 +144,7 @@ export default function MaterialInput({ material, setMaterial, onAnalyze }: Mate
             <button
               onClick={() => {
                 setParseError('');
+                setImagePreview('');
                 setMaterial({ title: sampleMaterialTitle, content: sampleMaterial, sourceType: 'sample' });
               }}
               className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 font-semibold text-violet-700 transition hover:bg-violet-100"
@@ -113,9 +165,62 @@ export default function MaterialInput({ material, setMaterial, onAnalyze }: Mate
             >
               {isParsingFile ? <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-sky-600" /> : <FileUp className="mx-auto mb-3 h-8 w-8 text-sky-600" />}
               <span className="block font-semibold text-slate-950">{isParsingFile ? '正在解析文件...' : '点击或拖拽上传资料'}</span>
-              <span className="mt-1 block text-sm text-slate-500">支持 .txt / .pdf / .docx / .pptx</span>
-              <input type="file" accept=".txt,.pdf,.docx,.pptx" className="sr-only" onChange={(event) => handleFile(event.target.files?.[0])} />
+              <span className="mt-1 block text-sm text-slate-500">支持 .txt / .pdf / .docx / .pptx / 图片</span>
+              <input type="file" accept=".txt,.pdf,.docx,.pptx,image/*" className="sr-only" onChange={(event) => handleFile(event.target.files?.[0])} />
             </label>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <p className="font-semibold text-slate-950">图片资料 / 移动端拍照</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">适合拍摄教材、讲义、黑板板书或手写资料。</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-sky-50"
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                    上传/拍照
+                  </button>
+                  {imagePreview ? (
+                    <button
+                      type="button"
+                      onClick={removeImage}
+                      className="focus-ring inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      删除
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(event) => handleFile(event.target.files?.[0])}
+              />
+              {imagePreview ? (
+                <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
+                  <img src={imagePreview} alt="资料图片预览" className="max-h-48 w-full rounded-xl border border-slate-200 bg-slate-50 object-contain" />
+                  <div className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                    <button
+                      type="button"
+                      onClick={recognizeImageMaterial}
+                      disabled={isRecognizingImage}
+                      className="focus-ring inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+                    >
+                      {isRecognizingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                      AI 识别图片文字
+                    </button>
+                    <p className="mt-3 text-slate-500">识别结果会自动填入右侧正文框，用户可以继续编辑。当前模型不支持 vision 时会提示手动输入。</p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <div className="grid grid-cols-2 gap-2 text-center text-xs font-medium text-slate-600">
               {supportedFormats.map((item) => (
                 <span key={item} className="rounded-lg border border-slate-200 bg-white px-2 py-2">{item}</span>

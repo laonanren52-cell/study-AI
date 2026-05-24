@@ -17,7 +17,7 @@ const readOpenAIResponseText = (data: unknown): string => {
   return parts.join('\n').trim();
 };
 
-export const recognizeAnswerFromImage = async (imageDataUrl: string, questionText: string): Promise<string> => {
+const recognizeImageText = async (imageDataUrl: string, promptText: string): Promise<string> => {
   const config = getEffectiveAIConfig();
   if (config.provider !== 'openai' || !config.apiKey) {
     throw new Error('当前模型暂不支持图片识别，请切换支持视觉能力的 OpenAI 模型，或手动输入答案。');
@@ -37,7 +37,7 @@ export const recognizeAnswerFromImage = async (imageDataUrl: string, questionTex
           content: [
             {
               type: 'input_text',
-              text: `请识别图片中的学生手写答案。题目是：${questionText}\n只返回识别出的答案文字、公式和步骤，不要评价对错。`,
+              text: promptText,
             },
             {
               type: 'input_image',
@@ -54,3 +54,15 @@ export const recognizeAnswerFromImage = async (imageDataUrl: string, questionTex
   if (!text) throw new Error('未能从图片中识别到有效答案，请手动输入。');
   return text;
 };
+
+export const recognizeAnswerFromImage = async (imageDataUrl: string, questionText: string): Promise<string> =>
+  recognizeImageText(
+    imageDataUrl,
+    `请识别图片中的学生手写答案。题目是：${questionText}\n只返回识别出的答案文字、公式和步骤，不要评价对错。`,
+  );
+
+export const recognizeTextFromImage = async (imageDataUrl: string): Promise<string> =>
+  recognizeImageText(
+    imageDataUrl,
+    '请识别图片中的学习资料文字、公式、标题和步骤。只返回可编辑的纯文本内容，尽量保留段落结构，不要总结，不要评价。',
+  );

@@ -1,7 +1,7 @@
 export type Importance = '高' | '中' | '低';
 export type Difficulty = '简单' | '中等' | '较难';
-export type QuestionType = 'single' | 'judge' | 'short';
-export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx';
+export type QuestionType = 'single' | 'judge' | 'fill' | 'short' | 'solution' | 'material';
+export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx' | 'image';
 export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen';
 export type SubjectType = '语文' | '数学' | '英语' | '物理' | '化学' | '生物' | '政治' | '历史' | '地理' | '通用';
 export type ExamQuestionPattern =
@@ -12,6 +12,8 @@ export type ExamQuestionPattern =
   | '材料分析题'
   | '变式迁移题'
   | '综合解答题';
+export type ExamType = '自动识别' | '期末' | '高职高考' | '考证' | '竞赛' | '自定义';
+export type TrainingMode = '基础巩固' | '错题强化' | '考前冲刺' | '变式训练';
 export type AppStep =
   | 'home'
   | 'material'
@@ -34,6 +36,21 @@ export interface MaterialInput {
   wordCount?: number;
   pageCount?: number;
   slideCount?: number;
+  imageDataUrl?: string;
+}
+
+export interface QuizSettings {
+  subjectType: SubjectType | '自动识别';
+  examType: ExamType;
+  customExamType?: string;
+  questionCount: 5 | 10 | 15;
+  difficultyRatio: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  questionTypes: QuestionType[];
+  trainingMode: TrainingMode;
 }
 
 export interface KnowledgePoint {
@@ -70,6 +87,7 @@ export interface QuizQuestion {
   commonMistake?: string;
   learningObjective?: string;
   answerInputMode?: 'text' | 'image' | 'both';
+  recommendedVariant?: string;
 }
 
 export interface AIStatus {
@@ -121,6 +139,9 @@ export interface DiagnosisItem {
   diagnosis: string;
   correctUnderstanding: string;
   suggestion: string;
+  missingRubric?: string[];
+  commonMistake?: string;
+  masteryStatus?: '已掌握' | '待加强' | '薄弱';
 }
 
 export interface ReviewPlanDay {

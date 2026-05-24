@@ -12,7 +12,10 @@ interface QuizTakingProps {
 const typeLabel = {
   single: '单选题',
   judge: '判断题',
+  fill: '填空题',
   short: '简答题',
+  solution: '解答题',
+  material: '材料分析题',
 };
 
 export default function QuizTaking({ questions, answers, setAnswers, onSubmit }: QuizTakingProps) {
@@ -134,7 +137,7 @@ export default function QuizTaking({ questions, answers, setAnswers, onSubmit }:
                 ))}
               </div>
             ) : null}
-            {question.type === 'short' ? (
+            {['fill', 'short', 'solution', 'material'].includes(question.type) ? (
               <>
                 <textarea
                   value={answerMap.get(question.id) ?? ''}
@@ -142,7 +145,7 @@ export default function QuizTaking({ questions, answers, setAnswers, onSubmit }:
                   className="focus-ring mt-4 min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 leading-7 text-slate-900 shadow-sm placeholder:text-slate-400"
                   placeholder="请输入你的简答/解答步骤，也可以上传手写答案图片识别后再编辑..."
                 />
-                {(question.answerInputMode === 'both' || question.answerInputMode === 'image') ? (
+                {(question.answerInputMode === 'both' || question.answerInputMode === 'image' || question.type === 'solution' || question.type === 'material') ? (
                   <ImageAnswerUploader
                     questionId={question.id}
                     questionText={question.question}

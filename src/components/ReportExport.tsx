@@ -1,4 +1,4 @@
-import { Check, Clipboard, Download, FileText, Printer } from 'lucide-react';
+import { Check, Clipboard, Download, FileText, FileType2, Printer } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type {
   DiagnosisItem,
@@ -9,7 +9,7 @@ import type {
   ReinforcementQuestion,
   ReviewPlanDay,
 } from '../types';
-import { downloadMarkdown, generateLearningReport } from '../services/reportService';
+import { downloadMarkdown, downloadWordReport, generateLearningReport } from '../services/reportService';
 import { formatFileSize } from '../utils/textClean';
 
 interface ReportExportProps {
@@ -79,18 +79,85 @@ export default function ReportExport(props: ReportExportProps) {
               <Printer className="h-5 w-5" />
               打印 / 导出 PDF
             </button>
-            <button disabled className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 text-slate-400">导出 Word 后续支持</button>
+            <button onClick={() => downloadWordReport(props)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 shadow-sm hover:border-sky-200 hover:bg-sky-50">
+              <FileType2 className="h-5 w-5" />
+              导出 Word 报告
+            </button>
           </div>
         </div>
 
         <div className="glass-panel rounded-2xl p-6">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-slate-950">报告预览</h3>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">Markdown</span>
+            <h3 className="text-lg font-semibold text-slate-950">正式报告预览</h3>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">Document</span>
           </div>
-          <pre className="max-h-[620px] overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-7 text-slate-700">
-            {report.markdown}
-          </pre>
+          <div className="max-h-[720px] overflow-auto rounded-2xl border border-slate-200 bg-white p-6 text-sm leading-7 text-slate-700">
+            <div className="border-b border-slate-200 pb-5 text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">智学闭环学习报告</p>
+              <h3 className="mt-3 text-2xl font-semibold text-slate-950">{report.title}</h3>
+              <p className="mt-2 text-slate-500">生成时间：{report.createdAt}</p>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="font-semibold text-slate-950">测评概览</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {[
+                    ['总分', `${props.result.score}`],
+                    ['掌握率', `${props.result.masteryRate}%`],
+                    ['正确题数', `${props.result.correctCount}`],
+                    ['错误题数', `${props.result.wrongCount}`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl bg-white px-3 py-2">
+                      <p className="text-xs text-slate-400">{label}</p>
+                      <p className="mt-1 font-semibold text-slate-950">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="font-semibold text-slate-950">薄弱知识点排行</p>
+                <div className="mt-3 space-y-2">
+                  {(props.result.weakKnowledgePoints.length ? props.result.weakKnowledgePoints : props.knowledgePoints.slice(0, 3)).map((item, index) => (
+                    <div key={item.id} className="flex justify-between rounded-xl bg-white px-3 py-2">
+                      <span>{index + 1}. {item.title}</span>
+                      <span className="text-amber-700">待加强</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">知识点</th>
+                    <th className="px-4 py-3">掌握率</th>
+                    <th className="px-4 py-3">答对/总数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {props.result.byKnowledgePoint.map((item) => (
+                    <tr key={item.knowledgePoint.id} className="border-t border-slate-200">
+                      <td className="px-4 py-3">{item.knowledgePoint.title}</td>
+                      <td className="px-4 py-3">{item.masteryRate}%</td>
+                      <td className="px-4 py-3">{item.correct}/{item.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              {props.reviewPlan.map((day) => (
+                <div key={day.day} className="rounded-2xl bg-slate-50 p-4">
+                  <p className="font-semibold text-slate-950">第 {day.day} 天：{day.goal}</p>
+                  <p className="mt-2 text-slate-600">任务：{day.checklist?.map((item) => item.text).join('；') || day.method}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>

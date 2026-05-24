@@ -4,10 +4,11 @@ import type { ReinforcementQuestion } from '../types';
 
 interface ReinforcementQuizProps {
   reinforcementQuiz: ReinforcementQuestion[];
+  onRefresh: () => void;
   onReport: () => void;
 }
 
-export default function ReinforcementQuiz({ reinforcementQuiz, onReport }: ReinforcementQuizProps) {
+export default function ReinforcementQuiz({ reinforcementQuiz, onRefresh, onReport }: ReinforcementQuizProps) {
   const [visibleAnswers, setVisibleAnswers] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [mastery, setMastery] = useState<Record<string, 'mastered' | 'review'>>({});
@@ -23,10 +24,16 @@ export default function ReinforcementQuiz({ reinforcementQuiz, onReport }: Reinf
           <h2 className="mt-2 text-3xl font-semibold text-slate-950">二次强化训练：同类变式与错因修复</h2>
           <p className="mt-2 text-slate-600">题目来自薄弱知识点和错题题型，默认隐藏答案，先作答再对照标准步骤和得分点。</p>
         </div>
-        <button onClick={onReport} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700">
-          <FileCheck2 className="h-5 w-5" />
-          生成学习报告
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={onRefresh} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 shadow-sm hover:border-sky-200 hover:bg-sky-50">
+            <RotateCcw className="h-5 w-5" />
+            刷新生成同类变式
+          </button>
+          <button onClick={onReport} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700">
+            <FileCheck2 className="h-5 w-5" />
+            生成学习报告
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

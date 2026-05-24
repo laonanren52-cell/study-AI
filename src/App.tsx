@@ -11,6 +11,7 @@ import DiagnosisPanel from './components/DiagnosisPanel';
 import ReviewPlan from './components/ReviewPlan';
 import ReinforcementQuiz from './components/ReinforcementQuiz';
 import ReportExport from './components/ReportExport';
+import { defaultQuizSettings } from './components/QuizSettingsPanel';
 import {
   evaluateAnswers,
   extractKnowledgePoints,
@@ -28,6 +29,7 @@ import type {
   MaterialInput as MaterialInputType,
   QuizQuestion,
   QuizResult,
+  QuizSettings,
   ReinforcementQuestion,
   ReviewPlanDay,
   UserAnswer,
@@ -45,6 +47,7 @@ export default function App() {
   const [material, setMaterial] = useState<MaterialInputType>(emptyMaterial);
   const [knowledgePoints, setKnowledgePoints] = useState<KnowledgePoint[]>([]);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [quizSettings, setQuizSettings] = useState<QuizSettings>(defaultQuizSettings);
   const [answers, setAnswers] = useState<UserAnswer[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
   const [diagnosis, setDiagnosis] = useState<DiagnosisItem[]>([]);
@@ -73,6 +76,7 @@ export default function App() {
     setMaterial(emptyMaterial);
     setKnowledgePoints([]);
     setQuestions([]);
+    setQuizSettings(defaultQuizSettings);
     setAnswers([]);
     setResult(null);
     setDiagnosis([]);
@@ -93,7 +97,7 @@ export default function App() {
 
   const handleGenerateQuiz = () =>
     runWithLoading('AI 正在生成测评题目...', async () => {
-      const generated = await generateQuiz(knowledgePoints, material.content);
+      const generated = await generateQuiz(knowledgePoints, material.content, quizSettings);
       setQuestions(generated);
       setAnswers([]);
       setAiStatus(getAIStatus());
@@ -132,6 +136,13 @@ export default function App() {
       goToStep('reinforcement');
     });
 
+  const handleRefreshReinforcement = () =>
+    runWithLoading('AI 正在刷新同类变式...', async () => {
+      if (!result) return;
+      const generated = await generateReinforcementQuiz(result.weakKnowledgePoints, questions, result, Date.now());
+      setReinforcementQuiz(generated);
+    });
+
   return (
     <div className="min-h-screen overflow-hidden bg-[linear-gradient(180deg,_#f7fbff_0%,_#eef7f4_45%,_#f8fafc_100%)] text-slate-900">
       <Header onReset={reset} aiStatus={aiStatus} onAIStatusChange={setAiStatus} />
@@ -147,13 +158,20 @@ export default function App() {
 
       {step === 'home' ? <HeroSection onStart={() => goToStep('material')} /> : null}
       {step === 'material' ? <MaterialInput material={material} setMaterial={setMaterial} onAnalyze={handleAnalyze} /> : null}
-      {step === 'knowledge' ? <KnowledgePointList knowledgePoints={knowledgePoints} onGenerateQuiz={handleGenerateQuiz} /> : null}
+      {step === 'knowledge' ? (
+        <KnowledgePointList
+          knowledgePoints={knowledgePoints}
+          quizSettings={quizSettings}
+          setQuizSettings={setQuizSettings}
+          onGenerateQuiz={handleGenerateQuiz}
+        />
+      ) : null}
       {step === 'quiz' ? <QuizGenerator questions={questions} knowledgePoints={knowledgePoints} aiStatus={aiStatus} onStart={() => goToStep('taking')} /> : null}
       {step === 'taking' ? <QuizTaking questions={questions} answers={answers} setAnswers={setAnswers} onSubmit={handleSubmitQuiz} /> : null}
       {step === 'result' && result ? <ResultSummary result={result} questions={questions} knowledgePoints={knowledgePoints} onDiagnosis={handleDiagnosis} /> : null}
       {step === 'diagnosis' ? <DiagnosisPanel diagnosis={diagnosis} onGeneratePlan={handleReviewPlan} /> : null}
       {step === 'plan' ? <ReviewPlan reviewPlan={reviewPlan} onGenerateReinforcement={handleReinforcement} /> : null}
-      {step === 'reinforcement' ? <ReinforcementQuiz reinforcementQuiz={reinforcementQuiz} onReport={() => goToStep('report')} /> : null}
+      {step === 'reinforcement' ? <ReinforcementQuiz reinforcementQuiz={reinforcementQuiz} onRefresh={handleRefreshReinforcement} onReport={() => goToStep('report')} /> : null}
       {step === 'report' && result ? (
         <ReportExport
           material={material}

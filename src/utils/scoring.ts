@@ -69,7 +69,7 @@ export const evaluateQuizAnswers = (
 
   const evaluated: QuestionResult[] = questions.map((question) => {
     const userAnswer = answerMap.get(question.id) ?? '';
-    if (question.type === 'short') return evaluateShortAnswer(question, userAnswer, maxPerQuestion);
+    if (['short', 'fill', 'solution', 'material'].includes(question.type)) return evaluateShortAnswer(question, userAnswer, maxPerQuestion);
 
     const isCorrect = normalizeAnswer(userAnswer) === normalizeAnswer(question.answer);
     return {
