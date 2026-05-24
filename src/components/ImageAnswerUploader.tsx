@@ -1,7 +1,8 @@
-import { Camera, ImagePlus, Loader2, Trash2 } from 'lucide-react';
+import { Camera, FileText, ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ImageAnswer } from '../types';
 import { recognizeAnswerFromImage } from '../services/visionAnswerService';
+import { parseFileToMaterial } from '../services/fileParser';
 
 interface ImageAnswerUploaderProps {
   questionId: string;
@@ -10,8 +11,10 @@ interface ImageAnswerUploaderProps {
 }
 
 export default function ImageAnswerUploader({ questionId, questionText, onRecognized }: ImageAnswerUploaderProps) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [imageAnswer, setImageAnswer] = useState<ImageAnswer | null>(null);
+  const [fileStatus, setFileStatus] = useState<{ name?: string; status: 'idle' | 'parsing' | 'parsed' | 'failed'; error?: string }>({ status: 'idle' });
 
   const handleFile = (file?: File) => {
     if (!file) return;
@@ -39,6 +42,22 @@ export default function ImageAnswerUploader({ questionId, questionText, onRecogn
     }
   };
 
+  const handleAnswerFile = async (file?: File) => {
+    if (!file) return;
+    setFileStatus({ name: file.name, status: 'parsing' });
+    try {
+      const parsed = await parseFileToMaterial(file);
+      setFileStatus({ name: file.name, status: 'parsed' });
+      onRecognized(`【答案附件：${file.name}】\n${parsed.content}`);
+    } catch (error) {
+      setFileStatus({
+        name: file.name,
+        status: 'failed',
+        error: error instanceof Error ? error.message : '答案文件解析失败，请改用图片或手动输入。',
+      });
+    }
+  };
+
   return (
     <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -49,11 +68,19 @@ export default function ImageAnswerUploader({ questionId, questionText, onRecogn
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => imageInputRef.current?.click()}
             className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-sky-50"
           >
             <ImagePlus className="h-4 w-4" />
             上传/拍照
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-sky-50"
+          >
+            <FileText className="h-4 w-4" />
+            提交文件
           </button>
           {imageAnswer?.imageDataUrl ? (
             <button
@@ -69,13 +96,34 @@ export default function ImageAnswerUploader({ questionId, questionText, onRecogn
       </div>
 
       <input
-        ref={inputRef}
+        ref={imageInputRef}
         type="file"
         accept="image/*"
         capture="environment"
         className="sr-only"
         onChange={(event) => handleFile(event.target.files?.[0])}
       />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt,.pdf,.docx,.pptx"
+        className="sr-only"
+        onChange={(event) => void handleAnswerFile(event.target.files?.[0])}
+      />
+
+      {fileStatus.status !== 'idle' ? (
+        <div className="mt-4 rounded-xl bg-white p-3 text-sm leading-6 text-slate-600">
+          {fileStatus.status === 'parsing' ? (
+            <p className="inline-flex items-center gap-2 text-sky-700"><Loader2 className="h-4 w-4 animate-spin" /> 正在解析答案文件：{fileStatus.name}</p>
+          ) : null}
+          {fileStatus.status === 'parsed' ? (
+            <p className="text-emerald-700">已解析答案文件：{fileStatus.name}，内容已填入答案框，可继续编辑。</p>
+          ) : null}
+          {fileStatus.status === 'failed' ? (
+            <p className="text-amber-800">{fileStatus.error}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {imageAnswer?.imageDataUrl ? (
         <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">

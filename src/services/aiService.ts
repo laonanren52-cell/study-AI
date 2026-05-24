@@ -9,6 +9,7 @@ import type {
   QuizSettings,
   ReinforcementQuestion,
   ReviewPlanDay,
+  SubjectType,
   UserAnswer,
 } from '../types';
 import { evaluateQuizAnswers } from '../utils/scoring';
@@ -272,20 +273,120 @@ const sentenceEnd = (text: string) => (/[。！？.!?]$/.test(text.trim()) ? tex
 const evidenceOf = (point: KnowledgePoint) => sentenceEnd(point.sourceEvidence || point.description);
 const cleanOption = (text: string) => sentenceEnd(text.replace(/\s+/g, ' ').trim());
 
-const correctOptionFor = (point: KnowledgePoint) =>
-  cleanOption(`${point.title}要求理解材料中的核心含义：${(point.description || point.sourceEvidence || '需要结合材料语境进行判断').replace(/[。！？.!?]$/, '')}`);
+const subjectOfPoint = (point: KnowledgePoint): SubjectType => point.subjectType || inferSubjectType(`${point.title}\n${point.description}\n${point.sourceEvidence ?? ''}`);
 
-const distractorOptionsFor = (point: KnowledgePoint) => [
-  cleanOption(`${point.title}只需要记住名称，不需要结合具体语境或材料依据进行理解`),
-  cleanOption(`${point.title}的考查完全脱离材料内容，主要依靠随意猜测即可完成`),
-  cleanOption(`${point.title}只关注表面字词，不需要分析作用、原因、流程或应用场景`),
-];
+const rotateByIndex = <T,>(items: T[], index: number) => {
+  if (items.length === 0) return items;
+  const offset = index % items.length;
+  return [...items.slice(offset), ...items.slice(0, offset)];
+};
+
+const uniqueOptions = (options: string[]) => {
+  const seen = new Set<string>();
+  return options
+    .map(cleanOption)
+    .filter((option) => {
+      const key = option.replace(/[A-D][.、]\s*/g, '').replace(/\s+/g, '');
+      if (seen.has(key) || option.length < 9) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
+const correctOptionFor = (point: KnowledgePoint, pattern: ExamQuestionPattern) => {
+  const evidence = (point.description || point.sourceEvidence || '需要结合资料中的定义、条件和例题进行判断').replace(/[。！？.!?]$/, '');
+  if (pattern === '公式套用题') return cleanOption(`应先识别适用公式或规则，再把题干条件代入，并检查范围、符号或单位是否符合要求`);
+  if (pattern === '条件辨析题') return cleanOption(`应抓住材料给出的限制条件，比较不同情境下结论是否仍然成立，不能只看关键词表面相似`);
+  if (pattern === '材料分析题') return cleanOption(`应先定位资料依据，再结合题干情境进行分析，最后用规范语言写出判断理由`);
+  if (pattern === '变式迁移题') return cleanOption(`应把“${point.title}”的核心方法迁移到新条件中，保持解题依据不变并重新检查结论`);
+  return cleanOption(`应依据资料中关于“${point.title}”的表述理解考点：${evidence}`);
+};
+
+const distractorOptionsFor = (point: KnowledgePoint, pattern: ExamQuestionPattern) => {
+  const subjectType = subjectOfPoint(point);
+  const common = point.commonMistakes?.length ? point.commonMistakes : getExamStrategy(subjectType).commonMistakes;
+  const subjectDistractors: Partial<Record<SubjectType, string[]>> = {
+    数学: [
+      '看到相似公式就直接套用，不需要检查定义域、符号或取值范围',
+      '只写出最后结果即可，中间推导和条件判断不会影响得分',
+      '把题干中的一个条件当作全部条件，不再验证结论是否满足原式',
+      '只要数值计算正确，就可以忽略单位、符号和步骤规范',
+    ],
+    高等数学: [
+      '只记结论公式，不需要说明极限、连续或可导等适用前提',
+      '把局部计算结果直接当作最终结论，不再检查定义域和端点条件',
+      '只写答案不写推导过程，综合题也不会扣关键步骤分',
+      '遇到变式条件时仍按原题套算，不需要重新分析题设',
+    ],
+    物理: [
+      '只选择熟悉公式代入即可，不需要分析研究对象和物理过程',
+      '方向、单位和初末状态可以省略，因为它们不影响结论判断',
+      '图像或过程题只看数值大小，不需要解释物理意义',
+      '不同运动阶段可以合并处理，不需要区分条件变化',
+    ],
+    电路: [
+      '只把元件数值相加即可，不需要判断串并联关系和参考方向',
+      '列方程时可以忽略节点电流或回路电压约束',
+      '电源方向和电流参考方向不影响结果符号',
+      '只给出计算结果即可，不需要标明单位和支路条件',
+    ],
+    化学: [
+      '只看反应物名称即可判断结论，不需要检查条件、配平和离子变化',
+      '实验现象和实验结论可以互相替代，不必区分',
+      '离子共存题只看单个离子性质，不需要考虑组合反应',
+      '方程式中省略反应条件和配平不会影响得分',
+    ],
+    语文: [
+      '只背规则名称即可判断，不需要结合句子语境和表达关系',
+      '看到相同词语就使用相同标点或修改方式，不需要看前后层次',
+      '阅读题只摘原文关键词即可，不需要说明依据和作用',
+      '病句或标点题可以凭语感判断，不必指出具体病因',
+    ],
+    英语: [
+      '只看单个单词含义即可作答，不需要结合时态、语态和句法结构',
+      '固定搭配和上下文语境无关，选项中熟悉的词一般就是答案',
+      '阅读题可以脱离原文定位，凭常识判断即可',
+      '完形填空只需要保证中文意思通顺，不需要检查语法一致性',
+    ],
+    计算机: [
+      '只背概念定义即可，不需要追踪算法过程或边界条件',
+      '时间复杂度只看代码行数，不需要分析循环嵌套和数据规模',
+      '程序题只要思路大致正确，边界输入和异常情况可以忽略',
+      '原理题可以用实现细节替代核心机制说明',
+    ],
+  };
+  const mapped = subjectDistractors[subjectType] || subjectDistractors[subjectType === '程序设计' || subjectType === '数据结构' || subjectType === '操作系统' || subjectType === '计算机网络' || subjectType === '数据库' ? '计算机' : '数学'] || [];
+  const patternDistractors = [
+    pattern === '条件辨析题' ? `忽略题干条件变化，直接沿用原结论，容易落入“${common[0] ?? '条件遗漏'}”的误区` : '',
+    pattern === '材料分析题' ? '脱离材料依据，只用常识或主观判断组织答案' : '',
+    pattern === '综合解答题' ? '只写结论，不列得分步骤，也不说明关键依据' : '',
+    pattern === '易错判断题' ? `把常见错误“${common[0] ?? '概念混淆'}”当作正确做法` : '',
+  ].filter(Boolean);
+  return uniqueOptions([...patternDistractors, ...mapped, ...common.map((item) => `本题只要避免“${item}”这个词，其他条件可以不再分析`)]).slice(0, 6);
+};
+
+const orderedOptionsFor = (point: KnowledgePoint, pattern: ExamQuestionPattern, index: number) => {
+  const answer = correctOptionFor(point, pattern);
+  const distractors = distractorOptionsFor(point, pattern).filter((option) => option !== answer);
+  const fallback = [
+    '只提取资料中的一个关键词，不需要说明它与题干条件之间的关系',
+    '把例题中的结论机械搬到新题中，不需要重新验证适用条件',
+    '答案只要方向相近即可，标准步骤和评分点可以省略',
+  ].map(cleanOption);
+  const options = uniqueOptions([answer, ...rotateByIndex([...distractors, ...fallback], index)]).slice(0, 4);
+  const filled = uniqueOptions([...options, ...fallback]).slice(0, 4);
+  return {
+    answer,
+    options: rotateByIndex(filled.includes(answer) ? filled : [answer, ...filled].slice(0, 4), index),
+  };
+};
 
 const questionTemplates = [
-  (title: string) => `关于“${title}”，下列说法正确的是哪一项？`,
-  (title: string) => `根据资料内容，“${title}”主要强调什么？`,
-  (title: string) => `下列哪一项最能概括“${title}”的核心含义？`,
-  (title: string) => `在材料语境下，“${title}”更接近以下哪种理解？`,
+  (title: string, pattern: ExamQuestionPattern) => `关于“${title}”这一考点，下列说法正确的是哪一项？`,
+  (title: string, pattern: ExamQuestionPattern) => `围绕“${title}”的${pattern}，下列哪一项最符合资料中的解题要求？`,
+  (title: string) => `根据资料内容，处理“${title}”相关题目时最应优先关注哪一点？`,
+  (title: string) => `如果把“${title}”放入新的考试情境中，下列理解最恰当的是哪一项？`,
+  (title: string, pattern: ExamQuestionPattern) => `下列关于“${title}”的${pattern}训练，哪一项最不容易导致失分？`,
 ];
 
 const defaultRubricFor = (point: KnowledgePoint, pattern: ExamQuestionPattern) => {
@@ -327,15 +428,14 @@ const enrichQuestion = (question: QuizQuestion, point: KnowledgePoint, pattern: 
 });
 
 const fallbackSingleQuestion = (point: KnowledgePoint, index: number, pattern: ExamQuestionPattern = '基础概念题'): QuizQuestion => {
-  const answer = correctOptionFor(point);
-  const options = [answer, ...distractorOptionsFor(point)];
+  const { answer, options } = orderedOptionsFor(point, pattern, index);
   return withQuality(enrichQuestion({
     id: `q${index + 1}`,
     type: 'single',
-    question: questionTemplates[index % questionTemplates.length](point.title),
+    question: questionTemplates[index % questionTemplates.length](point.title, pattern),
     options,
     answer,
-    explanation: `本题依据材料中的表述：“${evidenceOf(point)}”正确理解应围绕该知识点的含义、依据和考查方式展开。`,
+    explanation: `本题依据材料中的表述：“${evidenceOf(point)}”正确解法要围绕考点、条件限制、材料依据和得分步骤展开。`,
     optionExplanations: Object.fromEntries(options.map((option) => [option, option === answer ? '该选项符合材料依据和考点要求。' : '该选项属于常见误区，忽略了材料条件或考点边界。'])),
     knowledgePointId: point.id,
     difficulty: difficultyByIndex(index),
@@ -344,34 +444,60 @@ const fallbackSingleQuestion = (point: KnowledgePoint, index: number, pattern: E
 };
 
 const buildJudgeQuestion = (point: KnowledgePoint, index: number, pattern: ExamQuestionPattern = '易错判断题'): QuizQuestion =>
-  withQuality(enrichQuestion({
-    id: `q${index + 1}`,
-    type: 'judge',
-    question:
-      index % 2 === 0
-        ? `${point.title}的学习需要结合资料中的语境、作用或考查方式进行判断。`
-        : `${point.title}只要记住标题即可，不需要理解资料中的依据和应用场景。`,
-    answer: index % 2 === 0 ? '正确' : '错误',
-    explanation:
-      index % 2 === 0
+  {
+    const subjectType = subjectOfPoint(point);
+    const positiveStatements: Partial<Record<SubjectType, string>> = {
+      数学: `处理“${point.title}”相关题目时，既要写出公式依据，也要检查题干条件、符号或取值范围。`,
+      高等数学: `处理“${point.title}”相关题目时，应先确认适用前提，再按定义或定理分步推导。`,
+      物理: `处理“${point.title}”相关题目时，应先明确研究对象和物理过程，再选择公式。`,
+      化学: `处理“${point.title}”相关题目时，应同时关注反应条件、方程式规范和现象依据。`,
+      语文: `处理“${point.title}”相关题目时，应结合语境、规则和材料依据进行判断。`,
+      计算机: `处理“${point.title}”相关题目时，应能说明过程、边界条件和关键步骤，而不是只背术语。`,
+    };
+    const negativeStatements: Partial<Record<SubjectType, string>> = {
+      数学: `“${point.title}”只要记住结论即可，解答题不需要写中间步骤和条件判断。`,
+      高等数学: `“${point.title}”相关题目中，只要套用熟悉公式，就不需要检查定义域或前提条件。`,
+      物理: `“${point.title}”相关题目中，方向、单位和过程阶段可以省略，不会影响评分。`,
+      化学: `“${point.title}”相关题目中，方程式是否配平、条件是否完整并不影响答案正确性。`,
+      语文: `“${point.title}”相关题目只凭语感判断即可，不需要结合材料中的表达关系。`,
+      计算机: `“${point.title}”相关题目只需要写术语定义，不需要分析过程或边界条件。`,
+    };
+    const positive = positiveStatements[subjectType] || positiveStatements[subjectType === '程序设计' || subjectType === '数据结构' || subjectType === '操作系统' || subjectType === '计算机网络' || subjectType === '数据库' ? '计算机' : '数学'] || `“${point.title}”需要结合资料依据、条件限制和考查方式进行判断。`;
+    const negative = negativeStatements[subjectType] || negativeStatements[subjectType === '程序设计' || subjectType === '数据结构' || subjectType === '操作系统' || subjectType === '计算机网络' || subjectType === '数据库' ? '计算机' : '数学'] || `“${point.title}”只要记住标题即可，不需要理解资料依据和应用场景。`;
+    const isPositive = index % 2 === 0;
+    return withQuality(enrichQuestion({
+      id: `q${index + 1}`,
+      type: 'judge',
+      question: isPositive ? positive : negative,
+      answer: isPositive ? '正确' : '错误',
+      explanation: isPositive
         ? `判断正确。资料依据是：“${evidenceOf(point)}”`
-        : `判断错误。资料强调的是完整理解，而不是只记忆标题；依据是：“${evidenceOf(point)}”`,
-    knowledgePointId: point.id,
-    difficulty: difficultyByIndex(index),
-    sourceEvidence: evidenceOf(point),
-  }, point, pattern));
+        : `判断错误。该说法忽略了题干条件、标准步骤或材料依据；资料依据是：“${evidenceOf(point)}”`,
+      knowledgePointId: point.id,
+      difficulty: difficultyByIndex(index),
+      sourceEvidence: evidenceOf(point),
+    }, point, pattern));
+  };
 
 const buildShortQuestion = (point: KnowledgePoint, index: number, pattern: ExamQuestionPattern = '综合解答题'): QuizQuestion =>
-  withQuality(enrichQuestion({
-    id: `q${index + 1}`,
-    type: 'short',
-    question: `请结合资料完成“${point.title}”的标准解答：写出关键公式/规则、分析条件，并说明易错点。`,
-    answer: `应写出${point.title}的关键公式或规则，结合题干条件分步说明，并指出常见误区。资料依据：${evidenceOf(point)}`,
-    explanation: `回答应覆盖公式/规则、条件分析、标准步骤和易错点，不能只复述标题。`,
-    knowledgePointId: point.id,
-    difficulty: '较难',
-    sourceEvidence: evidenceOf(point),
-  }, point, pattern));
+  {
+    const formula = point.formulas?.[0];
+    const method = point.keyMethods?.[0] || getExamStrategy(subjectOfPoint(point)).methods[0];
+    return withQuality(enrichQuestion({
+      id: `q${index + 1}`,
+      type: 'short',
+      question: formula
+        ? `请围绕“${point.title}”完成一道步骤型解答：写出公式“${formula}”的使用条件，说明解题步骤，并指出一个易错点。`
+        : `请结合资料完成“${point.title}”的考试型作答：先定位材料依据，再说明判断方法“${method}”，最后写出常见失分点。`,
+      answer: formula
+        ? `应写出公式 ${formula}，说明适用条件，按题干条件分步推导，并检查常见误区。资料依据：${evidenceOf(point)}`
+        : `应引用资料依据，说明“${point.title}”的判断方法和得分点，并指出常见误区。资料依据：${evidenceOf(point)}`,
+      explanation: `回答应覆盖资料依据、关键方法、标准步骤和易错点，不能只复述标题。`,
+      knowledgePointId: point.id,
+      difficulty: '较难',
+      sourceEvidence: evidenceOf(point),
+    }, point, pattern));
+  };
 
 const scoreQuestionQuality = (question: QuizQuestion) => {
   let score = 100;
@@ -382,6 +508,9 @@ const scoreQuestionQuality = (question: QuizQuestion) => {
   if (badFragments.some((fragment) => JSON.stringify(question).includes(fragment))) score -= 30;
   if (question.type === 'single') {
     if (!question.options || question.options.length !== 4) score -= 40;
+    if (new Set(question.options?.map((option) => option.replace(/\s+/g, ''))).size !== 4) score -= 30;
+    const optionPrefix = question.options?.map((option) => option.replace(/^[A-D][.、]\s*/, '').slice(0, 10));
+    if (optionPrefix && optionPrefix.length === 4 && new Set(optionPrefix).size <= 2) score -= 20;
     question.options?.forEach((option) => {
       if (option.trim().length <= 8) score -= 20;
       if (/^[/、）).,，。；;]/.test(option.trim())) score -= 20;
@@ -412,6 +541,9 @@ export const validateQuestion = (question: QuizQuestion): boolean => {
   if (/^[/、）).,，。；;]/.test(normalized.question)) return false;
   if (normalized.type === 'single') {
     if (!normalized.options || normalized.options.length !== 4) return false;
+    if (new Set(normalized.options.map((option) => option.replace(/\s+/g, ''))).size !== 4) return false;
+    const optionPrefix = normalized.options.map((option) => option.replace(/^[A-D][.、]\s*/, '').slice(0, 10));
+    if (new Set(optionPrefix).size <= 2) return false;
     if (!normalized.options.includes(normalized.answer)) return false;
     if (normalized.options.some((option) => option.length <= 8 || /^[/、）).,，。；;]/.test(option) || /^[\u4e00-\u9fa5A-Za-z0-9]{1,8}$/.test(option))) return false;
   }
@@ -637,10 +769,20 @@ const improvedMockQuiz = (knowledgePoints: KnowledgePoint[], startIndex = 0) => 
   return improvedGenericMockQuiz(knowledgePoints, startIndex);
 };
 
+const normalizeDifficultyRatio = (settings?: QuizSettings) => {
+  const ratio = settings?.difficultyRatio ?? { easy: 20, medium: 50, hard: 30 };
+  const total = ratio.easy + ratio.medium + ratio.hard;
+  if (total <= 0) return { easy: 20, medium: 50, hard: 30 };
+  const easy = Math.round((ratio.easy / total) * 100);
+  const medium = Math.round((ratio.medium / total) * 100);
+  return { easy, medium, hard: Math.max(0, 100 - easy - medium) };
+};
+
 const difficultyFromSettings = (index: number, total: number, settings?: QuizSettings): Difficulty => {
   if (!settings) return difficultyByIndex(index);
-  const easyCount = Math.max(1, Math.round(total * settings.difficultyRatio.easy / 100));
-  const mediumCount = Math.max(1, Math.round(total * settings.difficultyRatio.medium / 100));
+  const ratio = normalizeDifficultyRatio(settings);
+  const easyCount = Math.max(0, Math.round(total * ratio.easy / 100));
+  const mediumCount = Math.max(1, Math.round(total * ratio.medium / 100));
   if (index < easyCount) return '简单';
   if (index < easyCount + mediumCount) return '中等';
   return '较难';
@@ -762,10 +904,14 @@ export const generateDiagnosis = async (
     const kp = result.byKnowledgePoint.find((item) => item.knowledgePoint.id === question.knowledgePointId)?.knowledgePoint;
     const reasonType = ['short', 'fill', 'solution', 'material'].includes(question.type) ? '表达不完整' : reasonTypes[index % reasonTypes.length];
     const userAnswer = answerMap.get(question.id) || '未作答';
-    const missingRubric = wrong.missingRubric?.length ? wrong.missingRubric : question.scoringRubric?.slice(0, 2) ?? ['关键得分点未命中'];
+    const missingRubric = [...new Set([
+      ...(wrong.missingRubric?.length ? wrong.missingRubric : []),
+      ...(question.scoringRubric ?? []),
+    ])].slice(0, 5);
     const commonMistake = question.commonMistake || kp?.commonMistakes?.[0] || '只看结论，没有结合条件、步骤或材料依据。';
     const masteryStatus: DiagnosisItem['masteryStatus'] = wrong.score <= 3 ? '薄弱' : wrong.score <= 7 ? '待加强' : '已掌握';
-    const targetedSuggestion = `你在本题中主要缺少“${missingRubric.slice(0, 2).join('、')}”。建议先复盘“${kp?.title ?? '该知识点'}”的材料依据和标准步骤，再完成 3 道同类变式题，重点检查：${commonMistake}`;
+    const correctUnderstanding = `标准答案/结论：${question.answer}。解析：${question.explanation}${question.solutionSteps?.length ? ` 标准步骤：${question.solutionSteps.join('；')}` : ''}`;
+    const targetedSuggestion = `你在本题中主要缺少“${missingRubric.slice(0, 3).join('、') || '关键得分点'}”。建议先回看资料依据“${question.sourceEvidence || kp?.sourceEvidence || kp?.description || '对应材料'}”，再按“${kp?.title ?? '该知识点'}”的标准步骤重做原题，随后完成 3 道同类变式；练习时重点检查：${commonMistake}`;
     return {
       id: `diag-${question.id}`,
       questionId: question.id,
@@ -773,10 +919,10 @@ export const generateDiagnosis = async (
       knowledgePointTitle: kp?.title ?? '相关知识点',
       userAnswer,
       reasonType,
-      diagnosis: `你的答案“${userAnswer}”没有准确命中本题考查点，说明对“${kp?.title ?? '该知识点'}”的理解还不稳定。`,
-      correctUnderstanding: question.explanation,
+      diagnosis: `你的答案“${userAnswer}”与标准答案“${question.answer}”不一致，主要问题是没有完整覆盖本题的条件、依据或得分步骤。`,
+      correctUnderstanding,
       suggestion: targetedSuggestion,
-      missingRubric,
+      missingRubric: missingRubric.length ? missingRubric : ['关键得分点未命中', '材料依据未写完整'],
       commonMistake,
       masteryStatus,
     };
@@ -792,7 +938,9 @@ export const generateReviewPlan = async (
   const strategy = getExamStrategy(subjectType);
   const formulas = [...new Set(weakKnowledgePoints.flatMap((item) => item.formulas ?? []))];
   const mistakes = [...new Set([...weakKnowledgePoints.flatMap((item) => item.commonMistakes ?? []), ...strategy.commonMistakes])].slice(0, 5);
-  const isMath = subjectType === '数学';
+  const missingItems = [...new Set(diagnosis.flatMap((item) => item.missingRubric ?? []))].slice(0, 6);
+  const sourceEvidenceTasks = diagnosis.slice(0, 3).map((item, index) => `重做错题 ${index + 1}：先写标准答案，再补齐“${(item.missingRubric ?? missingItems).slice(0, 2).join('、') || '缺失得分点'}”。`);
+  const isMath = ['数学', '高等数学', '线性代数', '概率统计'].includes(subjectType);
   return [
     {
       day: 1,
@@ -803,9 +951,11 @@ export const generateReviewPlan = async (
       method: isMath ? '先默写公式，再做 2 道母题，最后复盘条件和符号。' : '先整理规则，再做语境/材料判断题，最后用错因表复盘。',
       mustRemember: formulas.length > 0 ? formulas : [`${focus[0]}的定义、适用条件和材料依据`, ...strategy.methods.slice(0, 2)],
       exampleTasks: isMath
-        ? ['已知函数关系或公式条件，写出完整代入步骤。', '完成 1 道母题：公式识别 → 条件代入 → 结果检查。']
-        : ['完成 2 道基础概念/规则识别题。', '从材料中划出能支撑判断的关键词。'],
-      reinforcementTasks: isMath ? ['换数值变式 2 道', '换条件或象限变式 2 道'] : ['新语境判断题 3 道', '易错项辨析题 2 道'],
+        ? ['已知函数关系或公式条件，写出完整代入步骤。', '完成 1 道母题：公式识别 → 条件代入 → 结果检查。', ...sourceEvidenceTasks.slice(0, 1)]
+        : ['完成 2 道基础概念/规则识别题。', '从材料中划出能支撑判断的关键词。', ...sourceEvidenceTasks.slice(0, 1)],
+      reinforcementTasks: isMath
+        ? ['换数值变式 2 道：只换数字，保持公式体系不变。', '换条件变式 2 道：专门检查符号、范围或单位。', ...(missingItems[0] ? [`补齐得分点专项：${missingItems[0]}`] : [])]
+        : ['新语境判断题 3 道：每题必须写材料依据。', '易错项辨析题 2 道：说明每个错误选项错在哪里。', ...(missingItems[0] ? [`补齐得分点专项：${missingItems[0]}`] : [])],
       commonMistakes: mistakes.slice(0, 3),
       selfCheckCriteria: isMath ? ['能在 5 分钟内写出公式和适用条件。', '能说明每一步推导依据。'] : ['能说出规则依据。', '能用材料原句支持判断。'],
       checklist: [
@@ -822,8 +972,10 @@ export const generateReviewPlan = async (
       practiceCount: 8,
       method: isMath ? '按“已知条件变化、公式不变、符号/范围变化”做变式训练。' : '按“规则、语境、材料依据、易错项”四列制作对比表。',
       mustRemember: formulas.length > 0 ? formulas : strategy.methods,
-      exampleTasks: isMath ? ['把第 1 天母题改 2 个条件重新求解。', '用红笔标出每题的条件限制。'] : ['完成 3 道新语境材料判断题。', '说明每个错误选项错在哪里。'],
-      reinforcementTasks: isMath ? ['条件辨析题 3 道', '易错判断题 3 道', '综合解答题 2 道'] : ['材料分析题 3 道', '易错判断题 3 道', '简答表达题 2 道'],
+      exampleTasks: isMath ? ['把第 1 天母题改 2 个条件重新求解。', '用红笔标出每题的条件限制。', ...sourceEvidenceTasks.slice(1, 2)] : ['完成 3 道新语境材料判断题。', '说明每个错误选项错在哪里。', ...sourceEvidenceTasks.slice(1, 2)],
+      reinforcementTasks: isMath
+        ? ['条件辨析题 3 道：每题写出“条件变化点”。', '易错判断题 3 道：专查符号、范围、单位或前提。', '综合解答题 2 道：按得分点自评。']
+        : ['材料分析题 3 道：每题至少引用 1 处资料依据。', '易错判断题 3 道：写出错误原因。', '简答表达题 2 道：按要点分层作答。'],
       commonMistakes: mistakes,
       selfCheckCriteria: isMath ? ['能主动检查符号、范围、单位或定义域。', '能独立写出至少 3 个得分点。'] : ['能区分规则本身和语境条件。', '能完整写出判断理由。'],
       checklist: [
@@ -840,8 +992,8 @@ export const generateReviewPlan = async (
       practiceCount: 5,
       method: '先遮住解析重答错题，再完成系统生成的同类变式，最后按得分点自评。',
       mustRemember: formulas.length > 0 ? formulas : [`${focus[0]}的易错边界`, '错题对应的标准步骤和得分点'],
-      exampleTasks: ['重做原错题，不看答案写完整步骤。', '把每道错题改成一题同类变式。'],
-      reinforcementTasks: ['完成系统生成的强化题 3-5 道', '每题对照标准步骤和得分点打勾'],
+      exampleTasks: ['重做原错题，不看答案写完整步骤。', '把每道错题改成一题同类变式。', ...sourceEvidenceTasks.slice(2, 3)],
+      reinforcementTasks: ['完成系统生成的强化题 3-5 道。', '每题对照标准步骤和得分点自评。', '把仍然缺失的得分点写成下一轮复习清单。'],
       commonMistakes: mistakes,
       selfCheckCriteria: ['能说清原错因。', '能在限定时间内完成同类变式。', '能对照得分点找出缺失项。'],
       checklist: [

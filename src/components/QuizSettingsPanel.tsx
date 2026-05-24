@@ -6,10 +6,69 @@ interface QuizSettingsPanelProps {
   onChange: (settings: QuizSettings) => void;
 }
 
-const subjects: Array<QuizSettings['subjectType']> = ['自动识别', '语文', '数学', '英语', '物理', '化学', '通用'];
-const examTypes: ExamType[] = ['自动识别', '期末', '高职高考', '考证', '竞赛', '自定义'];
+const subjects: Array<QuizSettings['subjectType']> = [
+  '自动识别',
+  '语文',
+  '数学',
+  '英语',
+  '物理',
+  '化学',
+  '生物',
+  '政治',
+  '历史',
+  '地理',
+  '高等数学',
+  '线性代数',
+  '概率统计',
+  '大学物理',
+  '电路',
+  '计算机',
+  '程序设计',
+  '数据结构',
+  '操作系统',
+  '计算机网络',
+  '数据库',
+  '经济学',
+  '管理学',
+  '会计学',
+  '法学',
+  '医学',
+  '护理学',
+  '机械',
+  '哲学',
+  '文学',
+  '历史学',
+  '理学',
+  '工学',
+  '农学',
+  '艺术学',
+  '交叉学科',
+  '通用',
+];
+const examTypes: ExamType[] = [
+  '自动识别',
+  '小测',
+  '单元测验',
+  '周测',
+  '月考',
+  '期中',
+  '期末',
+  '期中期末',
+  '一模',
+  '二模',
+  '三模',
+  '中考',
+  '高考',
+  '高职高考',
+  '专升本',
+  '考研',
+  '大学课程考试',
+  '考证',
+  '竞赛',
+  '自定义',
+];
 const counts: Array<5 | 10 | 15> = [5, 10, 15];
-const trainingModes: TrainingMode[] = ['基础巩固', '错题强化', '考前冲刺', '变式训练'];
+const trainingModes: TrainingMode[] = ['基础巩固', '错题强化', '考前冲刺', '变式训练', '母题改编'];
 const questionTypeOptions: Array<{ value: QuestionType; label: string }> = [
   { value: 'single', label: '单选' },
   { value: 'judge', label: '判断' },
@@ -32,8 +91,29 @@ export const defaultQuizSettings: QuizSettings = {
   trainingMode: '基础巩固',
 };
 
+const sliderAccentClass = {
+  emerald: 'accent-emerald-500',
+  amber: 'accent-amber-500',
+  rose: 'accent-rose-500',
+};
+
 export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPanelProps) {
   const update = (patch: Partial<QuizSettings>) => onChange({ ...settings, ...patch });
+  const ratioTotal = settings.difficultyRatio.easy + settings.difficultyRatio.medium + settings.difficultyRatio.hard;
+  const normalizedRatio = {
+    easy: ratioTotal > 0 ? Math.round((settings.difficultyRatio.easy / ratioTotal) * 100) : 20,
+    medium: ratioTotal > 0 ? Math.round((settings.difficultyRatio.medium / ratioTotal) * 100) : 50,
+    hard: ratioTotal > 0 ? Math.round((settings.difficultyRatio.hard / ratioTotal) * 100) : 30,
+  };
+
+  const updateDifficulty = (key: keyof QuizSettings['difficultyRatio'], value: number) => {
+    update({
+      difficultyRatio: {
+        ...settings.difficultyRatio,
+        [key]: Math.max(0, Math.min(100, Number.isNaN(value) ? 0 : value)),
+      },
+    });
+  };
 
   const toggleQuestionType = (type: QuestionType) => {
     const exists = settings.questionTypes.includes(type);
@@ -144,15 +224,53 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
         </div>
 
         <div className="lg:col-span-2">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm font-medium text-slate-700">默认难度比例</span>
-            <span className="text-xs text-slate-500">简单 {settings.difficultyRatio.easy}% / 中等 {settings.difficultyRatio.medium}% / 较难 {settings.difficultyRatio.hard}%</span>
+          <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+            <span className="text-sm font-medium text-slate-700">难度比例</span>
+            <span className="text-xs text-slate-500">
+              当前输入合计 {ratioTotal}%；生成时按比例换算为 简单 {normalizedRatio.easy}% / 中等 {normalizedRatio.medium}% / 较难 {normalizedRatio.hard}%
+            </span>
           </div>
-          <div className="mt-3 grid grid-cols-[0.4fr_1fr_0.6fr] overflow-hidden rounded-full bg-slate-100 text-center text-xs font-semibold text-white">
-            <div className="bg-emerald-500 py-2">简单</div>
-            <div className="bg-amber-500 py-2">中等</div>
-            <div className="bg-rose-500 py-2">较难</div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {([
+              ['easy', '简单', '偏基础概念和直接套用', 'emerald'],
+              ['medium', '中等', '强调条件辨析和常见误区', 'amber'],
+              ['hard', '较难', '包含综合步骤和变式迁移', 'rose'],
+            ] as const).map(([key, label, desc, tone]) => (
+              <div key={key} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{label}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{desc}</p>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={settings.difficultyRatio[key]}
+                    onChange={(event) => updateDifficulty(key, Number(event.target.value))}
+                    className="focus-ring w-16 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm font-semibold text-slate-900"
+                    aria-label={`${label}题比例`}
+                  />
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={settings.difficultyRatio[key]}
+                  onChange={(event) => updateDifficulty(key, Number(event.target.value))}
+                  className={`mt-3 h-2 w-full cursor-pointer ${sliderAccentClass[tone]}`}
+                  aria-label={`${label}题滑动比例`}
+                />
+              </div>
+            ))}
           </div>
+          <button
+            type="button"
+            onClick={() => update({ difficultyRatio: { easy: 20, medium: 50, hard: 30 } })}
+            className="focus-ring mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            恢复推荐比例 20 / 50 / 30
+          </button>
         </div>
       </div>
     </div>

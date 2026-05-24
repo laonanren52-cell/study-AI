@@ -3,7 +3,43 @@ export type Difficulty = '简单' | '中等' | '较难';
 export type QuestionType = 'single' | 'judge' | 'fill' | 'short' | 'solution' | 'material';
 export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx' | 'image';
 export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen';
-export type SubjectType = '语文' | '数学' | '英语' | '物理' | '化学' | '生物' | '政治' | '历史' | '地理' | '通用';
+export type SubjectType =
+  | '语文'
+  | '数学'
+  | '英语'
+  | '物理'
+  | '化学'
+  | '生物'
+  | '政治'
+  | '历史'
+  | '地理'
+  | '高等数学'
+  | '线性代数'
+  | '概率统计'
+  | '大学物理'
+  | '电路'
+  | '计算机'
+  | '程序设计'
+  | '数据结构'
+  | '操作系统'
+  | '计算机网络'
+  | '数据库'
+  | '经济学'
+  | '管理学'
+  | '会计学'
+  | '法学'
+  | '医学'
+  | '护理学'
+  | '机械'
+  | '哲学'
+  | '文学'
+  | '历史学'
+  | '理学'
+  | '工学'
+  | '农学'
+  | '艺术学'
+  | '交叉学科'
+  | '通用';
 export type ExamQuestionPattern =
   | '基础概念题'
   | '公式套用题'
@@ -12,8 +48,28 @@ export type ExamQuestionPattern =
   | '材料分析题'
   | '变式迁移题'
   | '综合解答题';
-export type ExamType = '自动识别' | '期末' | '高职高考' | '考证' | '竞赛' | '自定义';
-export type TrainingMode = '基础巩固' | '错题强化' | '考前冲刺' | '变式训练';
+export type ExamType =
+  | '自动识别'
+  | '小测'
+  | '单元测验'
+  | '周测'
+  | '月考'
+  | '期中'
+  | '期末'
+  | '期中期末'
+  | '一模'
+  | '二模'
+  | '三模'
+  | '中考'
+  | '高考'
+  | '高职高考'
+  | '专升本'
+  | '考研'
+  | '大学课程考试'
+  | '考证'
+  | '竞赛'
+  | '自定义';
+export type TrainingMode = '基础巩固' | '错题强化' | '考前冲刺' | '变式训练' | '母题改编';
 export type AppStep =
   | 'home'
   | 'material'

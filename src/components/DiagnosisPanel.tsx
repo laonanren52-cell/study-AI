@@ -7,9 +7,9 @@ interface DiagnosisPanelProps {
 }
 
 const statusClass = {
-  已掌握: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-  待加强: 'bg-amber-50 text-amber-800 ring-amber-100',
-  薄弱: 'bg-rose-50 text-rose-700 ring-rose-100',
+  已掌握: 'bg-emerald-500',
+  待加强: 'bg-amber-500',
+  薄弱: 'bg-rose-500',
 };
 
 export default function DiagnosisPanel({ diagnosis, onGeneratePlan }: DiagnosisPanelProps) {
@@ -39,12 +39,15 @@ export default function DiagnosisPanel({ diagnosis, onGeneratePlan }: DiagnosisP
             return (
               <article key={item.id} className="rounded-[2rem] bg-white p-5 ring-1 ring-slate-200 shadow-[0_20px_70px_rgba(15,23,42,0.07)]">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
                     <Stethoscope className="h-5 w-5" />
                   </span>
-                  <span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${statusClass[status]}`}>{status}</span>
-                  <span className="rounded-full bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600 ring-1 ring-slate-200">{item.reasonType}</span>
-                  <span className="rounded-full bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600 ring-1 ring-slate-200">{item.knowledgePointTitle}</span>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
+                    <span className={`h-2 w-2 rounded-full ${statusClass[status]}`} />
+                    {status}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-600 ring-1 ring-slate-200">{item.reasonType}</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-600 ring-1 ring-slate-200">{item.knowledgePointTitle}</span>
                 </div>
                 <h3 className="mt-4 font-semibold leading-7 text-slate-950">{item.question}</h3>
 
@@ -57,18 +60,18 @@ export default function DiagnosisPanel({ diagnosis, onGeneratePlan }: DiagnosisP
                     <p className="mb-1 font-semibold text-slate-950">正确理解</p>
                     {item.correctUnderstanding}
                   </div>
-                  <div className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                    <p className="mb-1 font-semibold">缺失得分点</p>
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                    <p className="mb-1 font-semibold text-slate-950">缺失得分点</p>
                     {(item.missingRubric?.length ? item.missingRubric : ['关键步骤或材料依据未写完整']).join('；')}
                   </div>
-                  <div className="rounded-2xl bg-rose-50 p-4 text-sm leading-6 text-rose-800">
-                    <p className="mb-1 font-semibold">常见误区</p>
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                    <p className="mb-1 font-semibold text-slate-950">常见误区</p>
                     {item.commonMistake || '只写结论，没有说明条件、依据或步骤。'}
                   </div>
                 </div>
 
-                <div className="mt-3 rounded-2xl bg-emerald-50 p-4 text-sm leading-6 text-emerald-800">
-                  <p className="mb-1 font-semibold">复习建议 / 推荐强化题入口</p>
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
+                  <p className="mb-1 font-semibold text-slate-950">复习建议 / 推荐强化题入口</p>
                   {item.suggestion}
                 </div>
               </article>
