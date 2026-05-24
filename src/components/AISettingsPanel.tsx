@@ -1,5 +1,6 @@
 import { KeyRound, Save, ShieldAlert, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { AIProvider, AIStatus } from '../types';
 import {
   clearRuntimeAIConfig,
@@ -26,6 +27,25 @@ const providers: Array<{ value: AIProvider; label: string; description: string }
 export default function AISettingsPanel({ open, onClose, onStatusChange }: AISettingsPanelProps) {
   const [config, setConfig] = useState<RuntimeAIConfig>(() => getEffectiveAIConfig());
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, open]);
 
   if (!open) return null;
 
@@ -59,10 +79,10 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
 
   const needsKey = config.provider !== 'mock';
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/25 p-3 backdrop-blur-sm sm:p-6">
-      <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[calc(100vh-3rem)]">
-        <div className="shrink-0 border-b border-slate-200 px-5 py-4 sm:px-6 sm:py-5">
+  const modal = (
+    <div className="fixed inset-0 z-[100] flex min-h-dvh items-center justify-center overflow-y-auto bg-slate-900/35 p-3 backdrop-blur-sm sm:p-5">
+      <div className="flex max-h-[calc(100dvh-1.5rem)] w-[min(96vw,960px)] max-w-none flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2.5rem)]">
+        <div className="shrink-0 border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-semibold text-sky-700">
@@ -80,9 +100,9 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
           </div>
         </div>
 
-        <div className="min-h-0 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5">
-          <div className="grid gap-5 lg:grid-cols-[0.82fr_1.18fr]">
-            <div className="space-y-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
+          <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[0.82fr_1.18fr]">
+            <div className="min-w-0 space-y-2">
               {providers.map((provider) => {
                 const active = config.provider === provider.value;
                 return (
@@ -101,7 +121,7 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
               })}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               {config.provider === 'mock' ? (
                 <div className="rounded-xl bg-white p-4 text-sm leading-6 text-slate-600">
                   当前为 Mock 演示模式，不需要 API Key。保存后系统会继续使用本地规则生成知识点、题目和诊断。
@@ -145,7 +165,7 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <p className="text-sm text-slate-500">
               {saved ? '配置已保存，下一次生成知识点或题目时生效。' : needsKey ? '填写 API Key 后点击保存即可启用。' : '点击保存后继续使用 Mock。'}
@@ -164,4 +184,6 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
