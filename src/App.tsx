@@ -134,7 +134,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[linear-gradient(180deg,_#f7fbff_0%,_#eef7f4_45%,_#f8fafc_100%)] text-slate-900">
-      <Header onReset={reset} aiStatus={aiStatus} />
+      <Header onReset={reset} aiStatus={aiStatus} onAIStatusChange={setAiStatus} />
       <StepIndicator currentStep={step} visitedSteps={visitedSteps} onStepClick={goToStep} />
       {loadingLabel ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 px-5 backdrop-blur-sm">

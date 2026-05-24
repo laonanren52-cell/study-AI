@@ -1,5 +1,14 @@
 import type { AIProvider, AIStatus } from '../types';
 
+export interface RuntimeAIConfig {
+  provider: AIProvider;
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+}
+
+const STORAGE_KEY = 'zhixue-loop-ai-config';
+
 const providerLabels: Record<AIProvider, string> = {
   mock: 'Mock 演示模式',
   openai: 'OpenAI API 已启用',
@@ -7,45 +16,123 @@ const providerLabels: Record<AIProvider, string> = {
   qwen: 'Qwen API 已启用',
 };
 
-const normalizeProvider = (value: string | undefined): AIProvider => {
+const defaultProviderConfig: Record<Exclude<AIProvider, 'mock'>, Omit<RuntimeAIConfig, 'provider' | 'apiKey'>> = {
+  openai: {
+    model: 'gpt-4.1-mini',
+    baseUrl: 'https://api.openai.com/v1',
+  },
+  deepseek: {
+    model: 'deepseek-chat',
+    baseUrl: 'https://api.deepseek.com/v1',
+  },
+  qwen: {
+    model: 'qwen-plus',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  },
+};
+
+const normalizeProvider = (value: unknown): AIProvider => {
   if (value === 'openai' || value === 'deepseek' || value === 'qwen') return value;
   return 'mock';
 };
 
-export const getConfiguredProvider = (): AIProvider => normalizeProvider(import.meta.env.VITE_AI_PROVIDER);
-
-const providerConfig = {
-  openai: {
-    key: import.meta.env.VITE_OPENAI_API_KEY,
-    model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4.1-mini',
-    baseUrl: import.meta.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com/v1',
-  },
-  deepseek: {
-    key: import.meta.env.VITE_DEEPSEEK_API_KEY,
-    model: import.meta.env.VITE_DEEPSEEK_MODEL || 'deepseek-chat',
-    baseUrl: import.meta.env.VITE_DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
-  },
-  qwen: {
-    key: import.meta.env.VITE_QWEN_API_KEY,
-    model: import.meta.env.VITE_QWEN_MODEL || 'qwen-plus',
-    baseUrl: import.meta.env.VITE_QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-  },
+const readStoredConfig = (): RuntimeAIConfig | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<RuntimeAIConfig>;
+    const provider = normalizeProvider(parsed.provider);
+    if (provider === 'mock') return null;
+    return {
+      provider,
+      apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
+      model: typeof parsed.model === 'string' && parsed.model ? parsed.model : defaultProviderConfig[provider].model,
+      baseUrl: typeof parsed.baseUrl === 'string' && parsed.baseUrl ? parsed.baseUrl : defaultProviderConfig[provider].baseUrl,
+    };
+  } catch {
+    return null;
+  }
 };
 
-let runtimeStatus: AIStatus = (() => {
-  const provider = getConfiguredProvider();
-  if (provider === 'mock') return { provider, modeLabel: providerLabels.mock, isRealAI: false };
-  const config = providerConfig[provider];
-  if (!config.key) return { provider: 'mock', modeLabel: 'API 未配置，已回退 Mock', isRealAI: false };
-  return { provider, modeLabel: providerLabels[provider], isRealAI: true };
-})();
+const getEnvConfig = (): RuntimeAIConfig | null => {
+  const provider = normalizeProvider(import.meta.env.VITE_AI_PROVIDER);
+  if (provider === 'mock') return null;
+  const config = {
+    openai: {
+      apiKey: import.meta.env.VITE_OPENAI_API_KEY || '',
+      model: import.meta.env.VITE_OPENAI_MODEL || defaultProviderConfig.openai.model,
+      baseUrl: import.meta.env.VITE_OPENAI_BASE_URL || defaultProviderConfig.openai.baseUrl,
+    },
+    deepseek: {
+      apiKey: import.meta.env.VITE_DEEPSEEK_API_KEY || '',
+      model: import.meta.env.VITE_DEEPSEEK_MODEL || defaultProviderConfig.deepseek.model,
+      baseUrl: import.meta.env.VITE_DEEPSEEK_BASE_URL || defaultProviderConfig.deepseek.baseUrl,
+    },
+    qwen: {
+      apiKey: import.meta.env.VITE_QWEN_API_KEY || '',
+      model: import.meta.env.VITE_QWEN_MODEL || defaultProviderConfig.qwen.model,
+      baseUrl: import.meta.env.VITE_QWEN_BASE_URL || defaultProviderConfig.qwen.baseUrl,
+    },
+  }[provider];
+  return { provider, ...config };
+};
 
-export const getAIStatus = (): AIStatus => runtimeStatus;
+export const getDefaultAIConfig = (provider: AIProvider): RuntimeAIConfig => {
+  if (provider === 'mock') {
+    return { provider: 'mock', apiKey: '', model: '', baseUrl: '' };
+  }
+  return {
+    provider,
+    apiKey: '',
+    model: defaultProviderConfig[provider].model,
+    baseUrl: defaultProviderConfig[provider].baseUrl,
+  };
+};
+
+export const getEffectiveAIConfig = (): RuntimeAIConfig => {
+  const stored = readStoredConfig();
+  if (stored) return stored;
+  const envConfig = getEnvConfig();
+  if (envConfig) return envConfig;
+  return getDefaultAIConfig('mock');
+};
+
+export const saveRuntimeAIConfig = (config: RuntimeAIConfig) => {
+  if (typeof window === 'undefined') return;
+  if (config.provider === 'mock') {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } else {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  }
+  runtimeStatus = resolveAIStatus();
+};
+
+export const clearRuntimeAIConfig = () => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(STORAGE_KEY);
+  runtimeStatus = resolveAIStatus();
+};
+
+export const getConfiguredProvider = (): AIProvider => getEffectiveAIConfig().provider;
+
+const resolveAIStatus = (): AIStatus => {
+  const config = getEffectiveAIConfig();
+  if (config.provider === 'mock') return { provider: 'mock', modeLabel: providerLabels.mock, isRealAI: false };
+  if (!config.apiKey) return { provider: 'mock', modeLabel: 'API 未配置，已回退 Mock', isRealAI: false };
+  return { provider: config.provider, modeLabel: providerLabels[config.provider], isRealAI: true };
+};
+
+let runtimeStatus: AIStatus = resolveAIStatus();
+
+export const getAIStatus = (): AIStatus => {
+  runtimeStatus = resolveAIStatus();
+  return runtimeStatus;
+};
 
 export const hasRealAIConfig = () => {
-  const provider = getConfiguredProvider();
-  if (provider === 'mock') return false;
-  return Boolean(providerConfig[provider].key);
+  const config = getEffectiveAIConfig();
+  return config.provider !== 'mock' && Boolean(config.apiKey);
 };
 
 const extractJsonFromText = (text: string): unknown => {
@@ -75,12 +162,11 @@ const readOpenAIResponseText = (data: unknown): string => {
   throw new Error('OpenAI 响应中没有可读取文本。');
 };
 
-const callOpenAI = async (systemPrompt: string, userPrompt: string) => {
-  const config = providerConfig.openai;
+const callOpenAI = async (config: RuntimeAIConfig, systemPrompt: string, userPrompt: string) => {
   const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/responses`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.key}`,
+      Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -94,12 +180,11 @@ const callOpenAI = async (systemPrompt: string, userPrompt: string) => {
   return extractJsonFromText(readOpenAIResponseText(await response.json()));
 };
 
-const callOpenAICompatible = async (provider: 'deepseek' | 'qwen', systemPrompt: string, userPrompt: string) => {
-  const config = providerConfig[provider];
+const callOpenAICompatible = async (config: RuntimeAIConfig, systemPrompt: string, userPrompt: string) => {
   const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.key}`,
+      Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -112,27 +197,27 @@ const callOpenAICompatible = async (provider: 'deepseek' | 'qwen', systemPrompt:
       response_format: { type: 'json_object' },
     }),
   });
-  if (!response.ok) throw new Error(`${provider} 请求失败：${response.status} ${await response.text()}`);
+  if (!response.ok) throw new Error(`${config.provider} 请求失败：${response.status} ${await response.text()}`);
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') throw new Error(`${provider} 响应中没有 message.content。`);
+  if (typeof content !== 'string') throw new Error(`${config.provider} 响应中没有 message.content。`);
   return extractJsonFromText(content);
 };
 
 export const callLLMJson = async (systemPrompt: string, userPrompt: string): Promise<unknown | null> => {
-  const provider = getConfiguredProvider();
-  if (provider === 'mock') {
+  const config = getEffectiveAIConfig();
+  if (config.provider === 'mock') {
     runtimeStatus = { provider: 'mock', modeLabel: providerLabels.mock, isRealAI: false };
     return null;
   }
-  if (!hasRealAIConfig()) {
+  if (!config.apiKey) {
     runtimeStatus = { provider: 'mock', modeLabel: 'API 未配置，已回退 Mock', isRealAI: false };
     return null;
   }
 
   try {
-    const result = provider === 'openai' ? await callOpenAI(systemPrompt, userPrompt) : await callOpenAICompatible(provider, systemPrompt, userPrompt);
-    runtimeStatus = { provider, modeLabel: providerLabels[provider], isRealAI: true };
+    const result = config.provider === 'openai' ? await callOpenAI(config, systemPrompt, userPrompt) : await callOpenAICompatible(config, systemPrompt, userPrompt);
+    runtimeStatus = { provider: config.provider, modeLabel: providerLabels[config.provider], isRealAI: true };
     return result;
   } catch (error) {
     console.error('[智学闭环] LLM 调用失败，已回退 Mock：', error);
