@@ -1,4 +1,5 @@
 import { ArrowRight, BookOpenCheck, ClipboardCheck, FileText, LineChart, MapPinned, Target, TriangleAlert } from 'lucide-react';
+import LoginCard from './LoginCard';
 import TeacherDashboardPreview from './TeacherDashboardPreview';
 
 interface HeroSectionProps {
@@ -58,7 +59,8 @@ export default function HeroSection({ onStart }: HeroSectionProps) {
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <button
             onClick={onStart}
-            className="group focus-ring inline-flex items-center gap-4 rounded-full bg-slate-950 px-6 py-3 text-base font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,0.20)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 active:scale-[0.98]"
+            className="group focus-ring inline-flex min-h-12 items-center gap-4 rounded-full bg-[#07111f] px-6 py-3 text-base font-semibold text-white ring-1 ring-slate-950/10 shadow-[0_22px_58px_rgba(7,17,31,0.30)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 active:scale-[0.98]"
+            style={{ backgroundColor: '#07111f' }}
           >
             开始体验
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/12 transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-1 group-hover:-translate-y-[1px] group-hover:bg-white/18">
@@ -69,6 +71,8 @@ export default function HeroSection({ onStart }: HeroSectionProps) {
             支持 TXT / PDF / DOCX / PPTX
           </span>
         </div>
+
+        <LoginCard onStart={onStart} />
       </div>
 
       <div className="mx-auto mt-14 max-w-6xl rounded-[2.2rem] border border-white bg-slate-900/5 p-2 shadow-[0_32px_90px_rgba(15,23,42,0.11)]">
