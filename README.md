@@ -6,11 +6,14 @@
 
 第三版进一步升级为多格式资料输入 Demo：支持 TXT、PDF、Word `.docx`、PPT `.pptx` 在浏览器端本地解析，上传后自动提取文本、展示文件元信息，并进入同一套学习闭环。
 
+第四版重点修复题目质量：Mock 模式不再把知识点标题或碎片词硬拼成选项，而是生成完整题干、完整选项、合理干扰项、解析和来源依据；同时接入 OpenAI / DeepSeek / Qwen API，可在本地 Demo 中切换真实大模型生成。
+
 ## 核心功能
 
 - 资料输入：支持粘贴文本、上传 `.txt` / `.pdf` / `.docx` / `.pptx` 文件，并内置《人工智能基础概念》示例资料。
 - 知识点提取：模拟 AI 从学习资料中提取知识点、重要程度、掌握目标和考查方式。
 - 智能出题：根据知识点动态生成单选题、判断题和简答题。
+- 题目质量检查：每道题必须有完整题干、完整选项、正确答案、解析和来源依据。
 - 在线测评：支持真实交互答题、未答完提交确认、一键优秀答卷和一键含错答卷。
 - 错因诊断：根据错题生成概念混淆、关键词遗漏、场景判断错误等诊断。
 - 个性化复习：生成 3 天复习计划和薄弱知识点强化练习。
@@ -37,6 +40,15 @@
 - 扫描版 PDF 暂不支持 OCR。
 - 老版 `.doc` / `.ppt` 暂不支持。
 
+## 第四版新增功能
+
+- 重写 Mock 出题逻辑，避免出现“标点符号在高职高考中 / 分）形式知识点稳定”这类碎片选项。
+- 知识点新增 `sourceEvidence` 和 `keywords`，题目新增 `sourceEvidence` 和 `qualityScore`。
+- 新增题目质量校验：题干长度、单选 4 个完整选项、正确答案在选项中、解析和来源依据完整。
+- 新增真实 API 调用：支持 OpenAI Responses API，以及 DeepSeek / Qwen 的 OpenAI-compatible Chat Completions。
+- API 未配置或请求失败时自动回退 Mock，不会白屏。
+- 页面顶部显示当前模式：Mock 演示模式 / OpenAI API / DeepSeek API / Qwen API / API 回退 Mock。
+
 ## 技术栈
 
 - React
@@ -49,6 +61,7 @@
 - jszip
 - 本地状态管理
 - Mock AI 服务，预留真实大模型 API 接入位置
+- OpenAI / DeepSeek / Qwen API 可选接入
 
 ## 本地运行方式
 
@@ -132,12 +145,69 @@ npm run build
 
 ```bash
 VITE_AI_PROVIDER=mock
+
 VITE_OPENAI_API_KEY=
+VITE_OPENAI_MODEL=gpt-4.1-mini
+VITE_OPENAI_BASE_URL=https://api.openai.com/v1
+
 VITE_DEEPSEEK_API_KEY=
+VITE_DEEPSEEK_MODEL=deepseek-chat
+VITE_DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+
 VITE_QWEN_API_KEY=
+VITE_QWEN_MODEL=qwen-plus
+VITE_QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
 默认 `VITE_AI_PROVIDER=mock`，不需要后端和数据库即可运行完整 Demo。
+
+## 生成模式
+
+当前支持两种生成模式：
+
+- Mock 演示模式：默认模式，本地规则生成知识点、题目、诊断，适合离线路演。
+- API 真实生成模式：配置 OpenAI / DeepSeek / Qwen Key 后，由外部大模型生成知识点、题目和诊断。
+
+## 如何开启 API
+
+1. 复制环境变量文件：
+
+```bash
+copy .env.example .env
+```
+
+2. 选择 Provider，例如 DeepSeek：
+
+```bash
+VITE_AI_PROVIDER=deepseek
+VITE_DEEPSEEK_API_KEY=你的 Key
+```
+
+3. 重新启动开发服务器：
+
+```bash
+npm run dev
+```
+
+4. 打开页面顶部状态标签，确认显示“DeepSeek API 已启用”等真实 API 状态。
+
+如果没有配置 Key，或 API 请求失败，系统会自动回退到 Mock，并在浏览器控制台输出错误。
+
+## API Key 安全提醒
+
+`VITE_` 开头的环境变量会被 Vite 注入浏览器端代码，任何访问页面的人都可能看到这些变量。当前接入方式只适合本地比赛 Demo 或临时演示。正式上线必须通过后端代理保护 API Key，不要把真实密钥直接暴露在前端。
+
+## 题目质量标准
+
+系统会校验生成题目是否满足：
+
+- 题干完整，长度足够，不是碎片词。
+- 单选题必须有 4 个完整句子选项。
+- 干扰项合理但错误，不能使用“无关干扰项”“资料背景信息”等假选项。
+- 正确答案必须在选项中。
+- 每题必须有答案解析。
+- 每题必须有来源依据 `sourceEvidence`。
+- 题目和选项不能以 `/`、`、`、`）`、`.` 等明显残片开头。
 
 ## 后续可扩展方向
 
@@ -158,9 +228,10 @@ VITE_AI_PROVIDER=openai
 VITE_OPENAI_API_KEY=你的 Key
 ```
 
-2. 在 `realAiPlaceholder` 附近按 Provider 封装请求。
-3. 让模型返回结构化 JSON，字段保持与 `KnowledgePoint`、`QuizQuestion`、`DiagnosisItem` 等类型一致。
-4. 保留 mock 作为离线演示 fallback，避免比赛现场网络不稳定影响演示。
+2. 请求封装位于 `src/services/llmClient.ts`。
+3. Prompt 模板位于 `src/services/promptTemplates.ts`。
+4. 模型必须返回结构化 JSON，字段保持与 `KnowledgePoint`、`QuizQuestion`、`DiagnosisItem` 等类型一致。
+5. Mock 会作为离线 fallback，避免比赛现场网络不稳定影响演示。
 
 ## 更新记录
 

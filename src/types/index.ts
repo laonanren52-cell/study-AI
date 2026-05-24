@@ -2,6 +2,7 @@ export type Importance = '高' | '中' | '低';
 export type Difficulty = '简单' | '中等' | '较难';
 export type QuestionType = 'single' | 'judge' | 'short';
 export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx';
+export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen';
 export type AppStep =
   | 'home'
   | 'material'
@@ -33,6 +34,8 @@ export interface KnowledgePoint {
   importance: Importance;
   masteryTarget: string;
   examType: string;
+  sourceEvidence?: string;
+  keywords?: string[];
 }
 
 export interface QuizQuestion {
@@ -44,6 +47,14 @@ export interface QuizQuestion {
   explanation: string;
   knowledgePointId: string;
   difficulty: Difficulty;
+  sourceEvidence?: string;
+  qualityScore?: number;
+}
+
+export interface AIStatus {
+  provider: AIProvider;
+  modeLabel: string;
+  isRealAI: boolean;
 }
 
 export interface UserAnswer {

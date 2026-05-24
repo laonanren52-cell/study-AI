@@ -18,8 +18,10 @@ import {
   generateQuiz,
   generateReinforcementQuiz,
   generateReviewPlan,
+  getAIStatus,
 } from './services/aiService';
 import type {
+  AIStatus,
   AppStep,
   DiagnosisItem,
   KnowledgePoint,
@@ -49,6 +51,7 @@ export default function App() {
   const [reviewPlan, setReviewPlan] = useState<ReviewPlanDay[]>([]);
   const [reinforcementQuiz, setReinforcementQuiz] = useState<ReinforcementQuestion[]>([]);
   const [loadingLabel, setLoadingLabel] = useState('');
+  const [aiStatus, setAiStatus] = useState<AIStatus>(getAIStatus());
 
   const goToStep = (nextStep: AppStep) => {
     setStep(nextStep);
@@ -66,31 +69,34 @@ export default function App() {
   };
 
   const reset = () => {
-      goToStep('home');
-      setMaterial(emptyMaterial);
+    goToStep('home');
+    setMaterial(emptyMaterial);
     setKnowledgePoints([]);
     setQuestions([]);
     setAnswers([]);
     setResult(null);
     setDiagnosis([]);
     setReviewPlan([]);
-      setReinforcementQuiz([]);
-      setLoadingLabel('');
-      setVisitedSteps([]);
+    setReinforcementQuiz([]);
+    setLoadingLabel('');
+    setVisitedSteps([]);
+    setAiStatus(getAIStatus());
   };
 
   const handleAnalyze = () =>
     runWithLoading('AI 正在提取知识点...', async () => {
       const points = await extractKnowledgePoints(material.content);
       setKnowledgePoints(points);
+      setAiStatus(getAIStatus());
       goToStep('knowledge');
     });
 
   const handleGenerateQuiz = () =>
     runWithLoading('AI 正在生成测评题目...', async () => {
-      const generated = await generateQuiz(knowledgePoints);
+      const generated = await generateQuiz(knowledgePoints, material.content);
       setQuestions(generated);
       setAnswers([]);
+      setAiStatus(getAIStatus());
       goToStep('quiz');
     });
 
@@ -106,6 +112,7 @@ export default function App() {
       if (!result) return;
       const generated = await generateDiagnosis(result, questions, answers);
       setDiagnosis(generated);
+      setAiStatus(getAIStatus());
       goToStep('diagnosis');
     });
 
@@ -127,7 +134,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_34%),linear-gradient(135deg,_#07111f_0%,_#0f172a_48%,_#111827_100%)]">
-      <Header onReset={reset} />
+      <Header onReset={reset} aiStatus={aiStatus} />
       <StepIndicator currentStep={step} visitedSteps={visitedSteps} onStepClick={goToStep} />
       {loadingLabel ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
@@ -141,7 +148,7 @@ export default function App() {
       {step === 'home' ? <HeroSection onStart={() => goToStep('material')} /> : null}
       {step === 'material' ? <MaterialInput material={material} setMaterial={setMaterial} onAnalyze={handleAnalyze} /> : null}
       {step === 'knowledge' ? <KnowledgePointList knowledgePoints={knowledgePoints} onGenerateQuiz={handleGenerateQuiz} /> : null}
-      {step === 'quiz' ? <QuizGenerator questions={questions} knowledgePoints={knowledgePoints} onStart={() => goToStep('taking')} /> : null}
+      {step === 'quiz' ? <QuizGenerator questions={questions} knowledgePoints={knowledgePoints} aiStatus={aiStatus} onStart={() => goToStep('taking')} /> : null}
       {step === 'taking' ? <QuizTaking questions={questions} answers={answers} setAnswers={setAnswers} onSubmit={handleSubmitQuiz} /> : null}
       {step === 'result' && result ? <ResultSummary result={result} questions={questions} knowledgePoints={knowledgePoints} onDiagnosis={handleDiagnosis} /> : null}
       {step === 'diagnosis' ? <DiagnosisPanel diagnosis={diagnosis} onGeneratePlan={handleReviewPlan} /> : null}

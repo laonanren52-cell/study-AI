@@ -63,6 +63,7 @@ export default function ResultSummary({ result, questions, knowledgePoints, onDi
                       <p>用户答案：<span className="text-rose-100">{wrong.userAnswer || '未作答'}</span></p>
                       <p>正确答案：<span className="text-emerald-100">{question?.answer}</span></p>
                       <p>答案解析：<span className="text-slate-200">{question?.explanation}</span></p>
+                      {question?.sourceEvidence ? <p>来源依据：<span className="text-cyan-100">{question.sourceEvidence}</span></p> : null}
                       <p>对应知识点：<span className="text-cyan-100">{question ? getKnowledgeTitle(question.knowledgePointId) : '未知'}</span></p>
                       <p>得分情况：<span className="text-amber-100">{wrong.score}/{wrong.maxScore}</span></p>
                     </div>

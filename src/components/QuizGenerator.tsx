@@ -1,9 +1,11 @@
 import { ClipboardList, PlayCircle } from 'lucide-react';
-import type { KnowledgePoint, QuizQuestion } from '../types';
+import type { AIStatus, KnowledgePoint, QuizQuestion } from '../types';
+import AIStatusBadge from './AIStatusBadge';
 
 interface QuizGeneratorProps {
   questions: QuizQuestion[];
   knowledgePoints: KnowledgePoint[];
+  aiStatus: AIStatus;
   onStart: () => void;
 }
 
@@ -13,7 +15,7 @@ const typeLabel = {
   short: '简答题',
 };
 
-export default function QuizGenerator({ questions, knowledgePoints, onStart }: QuizGeneratorProps) {
+export default function QuizGenerator({ questions, knowledgePoints, aiStatus, onStart }: QuizGeneratorProps) {
   const getKnowledgeTitle = (id: string) => knowledgePoints.find((item) => item.id === id)?.title ?? '知识点';
   return (
     <section className="mx-auto max-w-7xl px-5 py-10">
@@ -21,6 +23,9 @@ export default function QuizGenerator({ questions, knowledgePoints, onStart }: Q
         <div>
           <h2 className="text-3xl font-semibold text-white">智能测评题目</h2>
           <p className="mt-2 text-slate-400">已生成 5 道单选、3 道判断、2 道简答，覆盖核心知识点。</p>
+          <div className="mt-3">
+            <AIStatusBadge status={aiStatus} />
+          </div>
         </div>
         <button onClick={onStart} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-200">
           <PlayCircle className="h-5 w-5" />
@@ -40,7 +45,17 @@ export default function QuizGenerator({ questions, knowledgePoints, onStart }: Q
               <ClipboardList className="mt-1 h-5 w-5 shrink-0 text-cyan-200" />
               <div>
                 <h3 className="font-semibold leading-7 text-white">{index + 1}. {question.question}</h3>
-                {question.options ? <p className="mt-2 text-sm text-slate-400">选项：{question.options.join(' / ')}</p> : null}
+                {question.options ? (
+                  <div className="mt-3 grid gap-2">
+                    {question.options.map((option, optionIndex) => (
+                      <p key={option} className="rounded-lg bg-white/6 px-3 py-2 text-sm text-slate-300">
+                        {String.fromCharCode(65 + optionIndex)}. {option}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+                {question.sourceEvidence ? <p className="mt-3 rounded-lg bg-cyan-300/8 p-3 text-sm leading-6 text-cyan-50">来源依据：{question.sourceEvidence}</p> : null}
+                {typeof question.qualityScore === 'number' ? <p className="mt-2 text-xs text-slate-500">题目质量评分：{question.qualityScore}/100</p> : null}
                 <p className="mt-2 text-sm text-slate-500">解析将在提交测评后展示。</p>
               </div>
             </div>

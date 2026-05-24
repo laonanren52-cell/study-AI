@@ -1,5 +1,15 @@
 # 更新记录
 
+## 2026-05-24 第四版优化
+
+- 重写 `aiService.ts` 的知识点提取和 Mock 出题逻辑，避免碎片词题干和碎片选项。
+- 为知识点新增来源依据和关键词，为题目新增来源依据和质量评分。
+- 新增 `src/services/llmClient.ts`，支持 OpenAI、DeepSeek、Qwen API 调用，失败自动回退 Mock。
+- 新增 `src/services/promptTemplates.ts`，统一知识点、出题、诊断 Prompt，并强制 JSON 输出。
+- 新增 `src/components/AIStatusBadge.tsx`，在页面显示 Mock/API 当前状态。
+- 题目页展示来源依据和题目质量评分。
+- 更新 `.env.example` 和 README，补充 API 配置方式、生产安全提醒和题目质量标准。
+
 ## 2026-05-24 第三版优化
 
 - 新增 `src/services/fileParser.ts`，支持 `.txt`、`.pdf`、`.docx`、`.pptx` 本地解析。
