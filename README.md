@@ -144,6 +144,58 @@ http://127.0.0.1:5188
 npm run build
 ```
 
+## 其他电脑本地部署
+
+在另一台 Windows / macOS / Linux 电脑上演示时，按下面步骤重新拉取并运行项目：
+
+1. 安装 Node.js 20 或更新版本，并安装 Git。
+2. 克隆仓库：
+
+```bash
+git clone https://github.com/laonanren52-cell/study-AI.git
+cd study-AI
+```
+
+3. 安装依赖：
+
+```bash
+npm install
+```
+
+4. 启动本地开发服务：
+
+```bash
+npm run dev
+```
+
+5. 在当前电脑浏览器打开：
+
+```text
+http://127.0.0.1:5188
+```
+
+项目默认固定使用 `5188` 端口。如果提示端口被占用，请先关闭占用该端口的程序，或修改 `package.json` 中的 `dev` 脚本端口。
+
+默认无需配置真实 AI，系统会使用 Mock 演示模式完整跑通。若要接入 DeepSeek / OpenAI / Qwen，可以复制 `.env.example` 为 `.env` 后填写对应 Key，也可以启动后点击页面右上角“接入真实 AI”直接配置。
+
+```bash
+copy .env.example .env
+```
+
+macOS / Linux 可使用：
+
+```bash
+cp .env.example .env
+```
+
+构建检查：
+
+```bash
+npm run build
+```
+
+安全提醒：`.env` 中以 `VITE_` 开头的变量会暴露到浏览器端，仅适合本地比赛 Demo；正式上线必须使用后端代理保护 API Key。
+
 ## Demo 演示流程
 
 1. 打开首页，点击“开始体验”。
