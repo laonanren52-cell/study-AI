@@ -92,6 +92,7 @@ export interface DiagnosisItem {
   questionId: string;
   question: string;
   knowledgePointTitle: string;
+  userAnswer?: string;
   reasonType: '概念混淆' | '关键词遗漏' | '应用场景判断错误' | '记忆不牢固' | '表达不完整';
   diagnosis: string;
   correctUnderstanding: string;

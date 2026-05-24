@@ -19,35 +19,37 @@ const steps: Array<{ key: AppStep; label: string }> = [
 ];
 
 export default function StepIndicator({ currentStep, visitedSteps, onStepClick }: StepIndicatorProps) {
-  const activeIndex = steps.findIndex((step) => step.key === currentStep);
+  const activeIndex = steps.findIndex((item) => item.key === currentStep);
   if (currentStep === 'home') return null;
 
   return (
-    <div className="mx-auto max-w-7xl px-5 pt-6">
-      <div className="glass-panel overflow-x-auto rounded-lg p-3">
+    <div className="no-print mx-auto max-w-7xl px-5 pt-6">
+      <div className="glass-panel overflow-x-auto rounded-2xl p-3">
         <div className="flex min-w-max items-center gap-2">
-          {steps.map((step, index) => {
-            const isActive = step.key === currentStep;
+          {steps.map((item, index) => {
+            const isActive = item.key === currentStep;
             const isDone = index < activeIndex;
-            const canClick = visitedSteps.includes(step.key) && !isActive;
+            const canClick = visitedSteps.includes(item.key) && !isActive;
             return (
-              <div key={step.key} className="flex items-center gap-2">
+              <div key={item.key} className="flex items-center gap-2">
                 <button
                   type="button"
                   disabled={!canClick}
-                  onClick={() => onStepClick(step.key)}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                  onClick={() => onStepClick(item.key)}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
                     isActive
-                      ? 'bg-cyan-400 text-slate-950'
+                      ? 'bg-sky-600 text-white shadow-sm'
                       : isDone
-                        ? 'bg-emerald-400/12 text-emerald-200 hover:bg-emerald-400/18'
-                        : 'bg-white/6 text-slate-400'
-                  } ${canClick ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
+                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        : 'bg-slate-50 text-slate-400'
+                  } ${canClick ? 'cursor-pointer' : 'cursor-not-allowed opacity-90'}`}
                 >
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-black/12 text-xs">{index + 1}</span>
-                  {step.label}
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${isActive ? 'bg-white/20' : 'bg-white'}`}>
+                    {index + 1}
+                  </span>
+                  {item.label}
                 </button>
-                {index < steps.length - 1 ? <div className="h-px w-6 bg-white/14" /> : null}
+                {index < steps.length - 1 ? <div className="h-px w-6 bg-slate-200" /> : null}
               </div>
             );
           })}

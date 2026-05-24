@@ -17,10 +17,11 @@ export default function ResultSummary({ result, questions, knowledgePoints, onDi
     <section className="mx-auto max-w-7xl px-5 py-10">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <h2 className="text-3xl font-semibold text-white">测评结果</h2>
-          <p className="mt-2 text-slate-400">系统已完成自动评分，并按知识点计算掌握情况。</p>
+          <p className="text-sm font-semibold text-sky-700">学习分析</p>
+          <h2 className="mt-2 text-3xl font-semibold text-slate-950">测评结果</h2>
+          <p className="mt-2 text-slate-600">系统已完成自动评分，并按知识点计算掌握情况与错题证据。</p>
         </div>
-        <button onClick={onDiagnosis} className="focus-ring rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-200">生成错因诊断</button>
+        <button onClick={onDiagnosis} className="focus-ring rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700">生成错因诊断</button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -30,48 +31,62 @@ export default function ResultSummary({ result, questions, knowledgePoints, onDi
         <StatCard icon={AlertTriangle} label="错误题数" value={`${result.wrongCount}`} tone="red" />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.85fr]">
-        <div className="glass-panel rounded-lg p-6">
-          <h3 className="text-xl font-semibold text-white">各知识点掌握情况</h3>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.9fr]">
+        <div className="glass-panel rounded-2xl p-6">
+          <h3 className="text-xl font-semibold text-slate-950">各知识点掌握情况</h3>
           <div className="mt-5 space-y-4">
             {result.byKnowledgePoint.map((item) => (
               <div key={item.knowledgePoint.id}>
                 <div className="mb-2 flex justify-between text-sm">
-                  <span className="text-slate-200">{item.knowledgePoint.title}</span>
-                  <span className="text-slate-400">{item.masteryRate}%</span>
+                  <span className="font-medium text-slate-700">{item.knowledgePoint.title}</span>
+                  <span className="text-slate-500">{item.masteryRate}%</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                  <div className={`h-full rounded-full ${item.masteryRate >= 75 ? 'bg-emerald-400' : item.masteryRate >= 50 ? 'bg-amber-400' : 'bg-rose-400'}`} style={{ width: `${item.masteryRate}%` }} />
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className={`h-full rounded-full ${item.masteryRate >= 75 ? 'bg-emerald-500' : item.masteryRate >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${item.masteryRate}%` }} />
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="glass-panel rounded-lg p-6">
-          <h3 className="text-xl font-semibold text-white">错题列表</h3>
-          <div className="mt-5 space-y-3">
-            {result.wrongQuestions.length === 0 ? (
-              <p className="rounded-lg bg-emerald-400/12 p-4 text-emerald-100">本次没有错题，可以进入复习计划做迁移训练。</p>
+        <div className="glass-panel rounded-2xl p-6">
+          <h3 className="text-xl font-semibold text-slate-950">薄弱知识点</h3>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {result.weakKnowledgePoints.length === 0 ? (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">暂无明显薄弱点</span>
             ) : (
-              result.wrongQuestions.map((wrong) => {
-                const question = getQuestion(wrong.questionId);
-                return (
-                  <div key={wrong.questionId} className="rounded-lg bg-white/6 p-4">
-                    <p className="font-medium leading-6 text-white">{question?.question}</p>
-                    <div className="mt-3 grid gap-2 text-sm text-slate-300">
-                      <p>用户答案：<span className="text-rose-100">{wrong.userAnswer || '未作答'}</span></p>
-                      <p>正确答案：<span className="text-emerald-100">{question?.answer}</span></p>
-                      <p>答案解析：<span className="text-slate-200">{question?.explanation}</span></p>
-                      {question?.sourceEvidence ? <p>来源依据：<span className="text-cyan-100">{question.sourceEvidence}</span></p> : null}
-                      <p>对应知识点：<span className="text-cyan-100">{question ? getKnowledgeTitle(question.knowledgePointId) : '未知'}</span></p>
-                      <p>得分情况：<span className="text-amber-100">{wrong.score}/{wrong.maxScore}</span></p>
-                    </div>
-                  </div>
-                );
-              })
+              result.weakKnowledgePoints.map((item) => (
+                <span key={item.id} className="rounded-full bg-rose-50 px-3 py-1 text-sm font-medium text-rose-700">{item.title}</span>
+              ))
             )}
           </div>
+          <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">评委可以从下方错题证据看到用户答案、正确答案、答案解析、对应知识点和得分情况。</p>
+        </div>
+      </div>
+
+      <div className="mt-6 glass-panel rounded-2xl p-6">
+        <h3 className="text-xl font-semibold text-slate-950">错题证据</h3>
+        <div className="mt-5 space-y-3">
+          {result.wrongQuestions.length === 0 ? (
+            <p className="rounded-xl bg-emerald-50 p-4 text-emerald-700">本次没有错题，可以进入复习计划做迁移训练。</p>
+          ) : (
+            result.wrongQuestions.map((wrong) => {
+              const question = getQuestion(wrong.questionId);
+              return (
+                <div key={wrong.questionId} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="font-semibold leading-6 text-slate-950">{question?.question}</p>
+                  <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
+                    <p className="rounded-xl bg-rose-50 p-3 text-slate-700"><span className="font-semibold text-rose-700">用户答案：</span>{wrong.userAnswer || '未作答'}</p>
+                    <p className="rounded-xl bg-emerald-50 p-3 text-slate-700"><span className="font-semibold text-emerald-700">正确答案：</span>{question?.answer}</p>
+                    <p className="rounded-xl bg-slate-50 p-3 leading-6 text-slate-700 md:col-span-2"><span className="font-semibold text-slate-900">答案解析：</span>{question?.explanation}</p>
+                    {question?.sourceEvidence ? <p className="rounded-xl bg-sky-50 p-3 leading-6 text-sky-700 md:col-span-2"><span className="font-semibold">来源依据：</span>{question.sourceEvidence}</p> : null}
+                    <p className="rounded-xl bg-violet-50 p-3 text-slate-700"><span className="font-semibold text-violet-700">对应知识点：</span>{question ? getKnowledgeTitle(question.knowledgePointId) : '未知'}</p>
+                    <p className="rounded-xl bg-amber-50 p-3 text-slate-700"><span className="font-semibold text-amber-700">得分情况：</span>{wrong.score}/{wrong.maxScore}</p>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </section>

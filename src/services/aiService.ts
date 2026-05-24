@@ -435,6 +435,7 @@ export const generateDiagnosis = async (
       questionId: question.id,
       question: question.question,
       knowledgePointTitle: kp?.title ?? '相关知识点',
+      userAnswer,
       reasonType,
       diagnosis: `你的答案“${userAnswer}”没有准确命中本题考查点，说明对“${kp?.title ?? '该知识点'}”的理解还不稳定。`,
       correctUnderstanding: question.explanation,

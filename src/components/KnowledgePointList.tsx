@@ -7,9 +7,9 @@ interface KnowledgePointListProps {
 }
 
 const importanceClass = {
-  高: 'bg-rose-400/15 text-rose-100 border-rose-300/25',
-  中: 'bg-amber-400/15 text-amber-100 border-amber-300/25',
-  低: 'bg-emerald-400/15 text-emerald-100 border-emerald-300/25',
+  高: 'bg-rose-50 text-rose-700 border-rose-100',
+  中: 'bg-amber-50 text-amber-700 border-amber-100',
+  低: 'bg-emerald-50 text-emerald-700 border-emerald-100',
 };
 
 export default function KnowledgePointList({ knowledgePoints, onGenerateQuiz }: KnowledgePointListProps) {
@@ -17,10 +17,11 @@ export default function KnowledgePointList({ knowledgePoints, onGenerateQuiz }: 
     <section className="mx-auto max-w-7xl px-5 py-10">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <h2 className="text-3xl font-semibold text-white">AI 知识点提取结果</h2>
-          <p className="mt-2 text-slate-400">已从资料中抽取核心概念、掌握目标与可能考查方式。</p>
+          <p className="text-sm font-semibold text-sky-700">知识结构化</p>
+          <h2 className="mt-2 text-3xl font-semibold text-slate-950">AI 知识点提取结果</h2>
+          <p className="mt-2 text-slate-600">已从资料中抽取核心概念、掌握目标、来源依据与可能考查方式。</p>
         </div>
-        <button onClick={onGenerateQuiz} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-200">
+        <button onClick={onGenerateQuiz} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700">
           生成测评题目
           <ArrowRight className="h-5 w-5" />
         </button>
@@ -28,20 +29,21 @@ export default function KnowledgePointList({ knowledgePoints, onGenerateQuiz }: 
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {knowledgePoints.map((item) => (
-          <article key={item.id} className="glass-panel rounded-lg p-5">
+          <article key={item.id} className="glass-panel rounded-2xl p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-300/12 text-cyan-200">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
                   <BadgeCheck className="h-5 w-5" />
                 </span>
-                <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+                <h3 className="text-lg font-semibold text-slate-950">{item.title}</h3>
               </div>
-              <span className={`rounded-full border px-3 py-1 text-xs ${importanceClass[item.importance]}`}>{item.importance}</span>
+              <span className={`rounded-full border px-3 py-1 text-xs font-medium ${importanceClass[item.importance]}`}>{item.importance}</span>
             </div>
-            <p className="mt-4 min-h-[72px] leading-6 text-slate-400">{item.description}</p>
+            <p className="mt-4 min-h-[72px] leading-6 text-slate-600">{item.description}</p>
             <div className="mt-5 space-y-3 text-sm">
-              <p className="rounded-lg bg-white/6 p-3 text-slate-300">建议掌握：{item.masteryTarget}</p>
-              <p className="rounded-lg bg-white/6 p-3 text-slate-300">考查方式：{item.examType}</p>
+              <p className="rounded-xl bg-slate-50 p-3 text-slate-600"><span className="font-semibold text-slate-800">建议掌握：</span>{item.masteryTarget}</p>
+              <p className="rounded-xl bg-slate-50 p-3 text-slate-600"><span className="font-semibold text-slate-800">考查方式：</span>{item.examType}</p>
+              {item.sourceEvidence ? <p className="rounded-xl bg-sky-50 p-3 text-sky-700"><span className="font-semibold">来源依据：</span>{item.sourceEvidence}</p> : null}
             </div>
           </article>
         ))}

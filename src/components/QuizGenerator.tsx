@@ -21,13 +21,14 @@ export default function QuizGenerator({ questions, knowledgePoints, aiStatus, on
     <section className="mx-auto max-w-7xl px-5 py-10">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <h2 className="text-3xl font-semibold text-white">智能测评题目</h2>
-          <p className="mt-2 text-slate-400">已生成 5 道单选、3 道判断、2 道简答，覆盖核心知识点。</p>
+          <p className="text-sm font-semibold text-sky-700">测评题库</p>
+          <h2 className="mt-2 text-3xl font-semibold text-slate-950">智能测评题目</h2>
+          <p className="mt-2 text-slate-600">题目覆盖单选、判断和简答，题干、选项、解析与来源依据均可在路演中直接展示。</p>
           <div className="mt-3">
             <AIStatusBadge status={aiStatus} />
           </div>
         </div>
-        <button onClick={onStart} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-200">
+        <button onClick={onStart} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700">
           <PlayCircle className="h-5 w-5" />
           开始答题
         </button>
@@ -35,27 +36,28 @@ export default function QuizGenerator({ questions, knowledgePoints, aiStatus, on
 
       <div className="space-y-4">
         {questions.map((question, index) => (
-          <article key={question.id} className="glass-panel rounded-lg p-5">
+          <article key={question.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="rounded bg-cyan-300/12 px-2.5 py-1 text-cyan-100">{typeLabel[question.type]}</span>
-              <span className="rounded bg-white/8 px-2.5 py-1 text-slate-300">{question.difficulty}</span>
-              <span className="rounded bg-violet-300/12 px-2.5 py-1 text-violet-100">{getKnowledgeTitle(question.knowledgePointId)}</span>
+              <span className="rounded-full bg-sky-50 px-3 py-1 font-medium text-sky-700">{typeLabel[question.type]}</span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">{question.difficulty}</span>
+              <span className="rounded-full bg-violet-50 px-3 py-1 font-medium text-violet-700">{getKnowledgeTitle(question.knowledgePointId)}</span>
             </div>
             <div className="mt-4 flex gap-3">
-              <ClipboardList className="mt-1 h-5 w-5 shrink-0 text-cyan-200" />
-              <div>
-                <h3 className="font-semibold leading-7 text-white">{index + 1}. {question.question}</h3>
+              <ClipboardList className="mt-1 h-5 w-5 shrink-0 text-sky-700" />
+              <div className="min-w-0 flex-1">
+                <h3 className="font-semibold leading-7 text-slate-950">{index + 1}. {question.question}</h3>
                 {question.options ? (
                   <div className="mt-3 grid gap-2">
                     {question.options.map((option, optionIndex) => (
-                      <p key={option} className="rounded-lg bg-white/6 px-3 py-2 text-sm text-slate-300">
-                        {String.fromCharCode(65 + optionIndex)}. {option}
+                      <p key={`${question.id}-${optionIndex}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                        <span className="mr-2 font-semibold text-slate-900">{String.fromCharCode(65 + optionIndex)}.</span>
+                        {option}
                       </p>
                     ))}
                   </div>
                 ) : null}
-                {question.sourceEvidence ? <p className="mt-3 rounded-lg bg-cyan-300/8 p-3 text-sm leading-6 text-cyan-50">来源依据：{question.sourceEvidence}</p> : null}
-                {typeof question.qualityScore === 'number' ? <p className="mt-2 text-xs text-slate-500">题目质量评分：{question.qualityScore}/100</p> : null}
+                {question.sourceEvidence ? <p className="mt-3 rounded-xl bg-sky-50 p-3 text-sm leading-6 text-sky-700"><span className="font-semibold">来源依据：</span>{question.sourceEvidence}</p> : null}
+                {typeof question.qualityScore === 'number' ? <p className="mt-2 text-xs text-slate-400">题目质量评分：{question.qualityScore}/100</p> : null}
                 <p className="mt-2 text-sm text-slate-500">解析将在提交测评后展示。</p>
               </div>
             </div>

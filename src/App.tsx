@@ -133,14 +133,14 @@ export default function App() {
     });
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_34%),linear-gradient(135deg,_#07111f_0%,_#0f172a_48%,_#111827_100%)]">
+    <div className="min-h-screen overflow-hidden bg-[linear-gradient(180deg,_#f7fbff_0%,_#eef7f4_45%,_#f8fafc_100%)] text-slate-900">
       <Header onReset={reset} aiStatus={aiStatus} />
       <StepIndicator currentStep={step} visitedSteps={visitedSteps} onStepClick={goToStep} />
       {loadingLabel ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-          <div className="glass-panel rounded-lg px-8 py-6 text-center">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
-            <p className="mt-4 font-medium text-white">{loadingLabel}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 px-5 backdrop-blur-sm">
+          <div className="glass-panel rounded-2xl px-8 py-6 text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+            <p className="mt-4 font-medium text-slate-900">{loadingLabel}</p>
           </div>
         </div>
       ) : null}

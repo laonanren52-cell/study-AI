@@ -8,10 +8,10 @@ interface AIStatusBadgeProps {
 export default function AIStatusBadge({ status }: AIStatusBadgeProps) {
   return (
     <div
-      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
         status.isRealAI
-          ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100'
-          : 'border-amber-300/30 bg-amber-400/10 text-amber-100'
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          : 'border-amber-200 bg-amber-50 text-amber-700'
       }`}
       title={status.isRealAI ? '当前正在使用真实外部大模型 API' : '当前使用本地 Mock 规则生成，适合离线演示'}
     >
