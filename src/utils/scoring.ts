@@ -1,10 +1,62 @@
 import type { KnowledgePoint, QuestionResult, QuizQuestion, QuizResult, UserAnswer } from '../types';
 
-const normalizeAnswer = (value: string) => value.trim().toLowerCase();
+const normalizeAnswer = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[，。；：、,.!?！？]/g, '');
 
-const shortAnswerKeywords: Record<string, string[]> = {
-  q9: ['过拟合', '训练数据', '新数据', '泛化'],
-  q10: ['个性化', '薄弱', '推荐', '复习'],
+const splitKeywords = (value: string) =>
+  value
+    .split(/[，。、；：\s/+()（）=]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2);
+
+const containsMeaning = (answer: string, target: string) => {
+  const normalizedAnswer = normalizeAnswer(answer);
+  const normalizedTarget = normalizeAnswer(target);
+  if (!normalizedTarget) return false;
+  if (normalizedAnswer.includes(normalizedTarget)) return true;
+  const keywords = splitKeywords(target);
+  if (keywords.length === 0) return false;
+  const matched = keywords.filter((keyword) => normalizedAnswer.includes(normalizeAnswer(keyword)));
+  return matched.length >= Math.ceil(keywords.length * 0.45);
+};
+
+const evaluateShortAnswer = (question: QuizQuestion, userAnswer: string, maxScore: number): QuestionResult => {
+  const rubric = question.scoringRubric?.length
+    ? question.scoringRubric
+    : splitKeywords(question.answer).slice(0, 6).map((item) => `包含关键词：${item}`);
+  const steps = question.solutionSteps ?? [];
+  const matchedRubric = rubric.filter((item) => containsMeaning(userAnswer, item));
+  const matchedSteps = steps.filter((item) => containsMeaning(userAnswer, item));
+  const formulaHints = [question.answer, question.explanation, ...(question.solutionSteps ?? [])]
+    .join('\n')
+    .match(/(?:sin|cos|tan)[²^]?[αa-z]?|平方关系|商数关系|象限|正负号|公式|步骤|材料依据/g) ?? [];
+  const matchedFormulaHints = [...new Set(formulaHints)].filter((item) => containsMeaning(userAnswer, item));
+
+  const totalUnits = Math.max(rubric.length + steps.length + Math.min(matchedFormulaHints.length + 1, 3), 1);
+  const matchedUnits = matchedRubric.length + matchedSteps.length + Math.min(matchedFormulaHints.length, 3);
+  const score = Math.min(maxScore, Math.round((matchedUnits / totalUnits) * maxScore));
+  const missingRubric = rubric.filter((item) => !matchedRubric.includes(item));
+
+  return {
+    questionId: question.id,
+    isCorrect: score >= 7,
+    score,
+    maxScore,
+    userAnswer,
+    matchedKeywords: [...matchedSteps, ...matchedFormulaHints],
+    matchedRubric,
+    missingRubric,
+    feedback:
+      score >= 8
+        ? '步骤和得分点较完整。'
+        : score >= 5
+          ? `已命中部分得分点，但仍缺少：${missingRubric.slice(0, 2).join('；') || '关键步骤'}。`
+          : `答案缺少主要步骤和得分点，建议对照标准步骤重做。`,
+  };
 };
 
 export const evaluateQuizAnswers = (
@@ -17,19 +69,7 @@ export const evaluateQuizAnswers = (
 
   const evaluated: QuestionResult[] = questions.map((question) => {
     const userAnswer = answerMap.get(question.id) ?? '';
-    if (question.type === 'short') {
-      const keywords = shortAnswerKeywords[question.id] ?? question.answer.split(/[，。、；\s]+/).filter(Boolean);
-      const matchedKeywords = keywords.filter((word) => normalizeAnswer(userAnswer).includes(normalizeAnswer(word)));
-      const score = Math.min(maxPerQuestion, Math.round((matchedKeywords.length / Math.max(keywords.length, 1)) * maxPerQuestion));
-      return {
-        questionId: question.id,
-        isCorrect: score >= 7,
-        score,
-        maxScore: maxPerQuestion,
-        userAnswer,
-        matchedKeywords,
-      };
-    }
+    if (question.type === 'short') return evaluateShortAnswer(question, userAnswer, maxPerQuestion);
 
     const isCorrect = normalizeAnswer(userAnswer) === normalizeAnswer(question.answer);
     return {
@@ -38,6 +78,9 @@ export const evaluateQuizAnswers = (
       score: isCorrect ? maxPerQuestion : 0,
       maxScore: maxPerQuestion,
       userAnswer,
+      matchedRubric: isCorrect ? question.scoringRubric ?? [] : [],
+      missingRubric: isCorrect ? [] : question.scoringRubric ?? ['正确选项判断'],
+      feedback: isCorrect ? '选择判断正确。' : question.commonMistake || '选项判断错误，请对照解析和易错项复盘。',
     };
   });
 

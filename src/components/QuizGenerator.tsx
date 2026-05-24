@@ -39,6 +39,7 @@ export default function QuizGenerator({ questions, knowledgePoints, aiStatus, on
           <article key={question.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="rounded-full bg-sky-50 px-3 py-1 font-medium text-sky-700">{typeLabel[question.type]}</span>
+              {question.examPattern ? <span className="rounded-full bg-amber-50 px-3 py-1 font-medium text-amber-700">{question.examPattern}</span> : null}
               <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">{question.difficulty}</span>
               <span className="rounded-full bg-violet-50 px-3 py-1 font-medium text-violet-700">{getKnowledgeTitle(question.knowledgePointId)}</span>
             </div>
@@ -57,6 +58,11 @@ export default function QuizGenerator({ questions, knowledgePoints, aiStatus, on
                   </div>
                 ) : null}
                 {question.sourceEvidence ? <p className="mt-3 rounded-xl bg-sky-50 p-3 text-sm leading-6 text-sky-700"><span className="font-semibold">来源依据：</span>{question.sourceEvidence}</p> : null}
+                <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
+                  {question.learningObjective ? <p className="rounded-xl bg-slate-50 p-3 leading-6 text-slate-600"><span className="font-semibold text-slate-900">考查目标：</span>{question.learningObjective}</p> : null}
+                  {question.commonMistake ? <p className="rounded-xl bg-rose-50 p-3 leading-6 text-rose-700"><span className="font-semibold">常见误区：</span>{question.commonMistake}</p> : null}
+                  {question.scoringRubric?.length ? <p className="rounded-xl bg-emerald-50 p-3 leading-6 text-emerald-700 md:col-span-2"><span className="font-semibold">得分点：</span>{question.scoringRubric.join('；')}</p> : null}
+                </div>
                 {typeof question.qualityScore === 'number' ? <p className="mt-2 text-xs text-slate-400">题目质量评分：{question.qualityScore}/100</p> : null}
                 <p className="mt-2 text-sm text-slate-500">解析将在提交测评后展示。</p>
               </div>

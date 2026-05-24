@@ -1,5 +1,6 @@
 import { CheckCircle2, Send, Wand2, XCircle } from 'lucide-react';
 import type { QuizQuestion, UserAnswer } from '../types';
+import ImageAnswerUploader from './ImageAnswerUploader';
 
 interface QuizTakingProps {
   questions: QuizQuestion[];
@@ -95,7 +96,9 @@ export default function QuizTaking({ questions, answers, setAnswers, onSubmit }:
         {questions.map((question, index) => (
           <article key={question.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-medium text-sky-700">{typeLabel[question.type]}</span>
+            {question.examPattern ? <span className="ml-2 rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700">{question.examPattern}</span> : null}
             <h3 className="mt-4 font-semibold leading-7 text-slate-950">{index + 1}. {question.question}</h3>
+            {question.learningObjective ? <p className="mt-2 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600"><span className="font-semibold text-slate-800">考查目标：</span>{question.learningObjective}</p> : null}
             {question.type === 'single' && question.options ? (
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {question.options.map((option, optionIndex) => (
@@ -132,12 +135,26 @@ export default function QuizTaking({ questions, answers, setAnswers, onSubmit }:
               </div>
             ) : null}
             {question.type === 'short' ? (
-              <textarea
-                value={answerMap.get(question.id) ?? ''}
-                onChange={(event) => updateAnswer(question.id, event.target.value)}
-                className="focus-ring mt-4 min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 leading-7 text-slate-900 shadow-sm placeholder:text-slate-400"
-                placeholder="请输入你的简答内容..."
-              />
+              <>
+                <textarea
+                  value={answerMap.get(question.id) ?? ''}
+                  onChange={(event) => updateAnswer(question.id, event.target.value)}
+                  className="focus-ring mt-4 min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 leading-7 text-slate-900 shadow-sm placeholder:text-slate-400"
+                  placeholder="请输入你的简答/解答步骤，也可以上传手写答案图片识别后再编辑..."
+                />
+                {(question.answerInputMode === 'both' || question.answerInputMode === 'image') ? (
+                  <ImageAnswerUploader
+                    questionId={question.id}
+                    questionText={question.question}
+                    onRecognized={(text) => updateAnswer(question.id, text)}
+                  />
+                ) : null}
+                {question.scoringRubric?.length ? (
+                  <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-800">
+                    <span className="font-semibold">本题得分点：</span>{question.scoringRubric.join('；')}
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </article>
         ))}

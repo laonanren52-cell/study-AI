@@ -43,6 +43,10 @@ export default function KnowledgePointList({ knowledgePoints, onGenerateQuiz }: 
             <div className="mt-5 space-y-3 text-sm">
               <p className="rounded-xl bg-slate-50 p-3 text-slate-600"><span className="font-semibold text-slate-800">建议掌握：</span>{item.masteryTarget}</p>
               <p className="rounded-xl bg-slate-50 p-3 text-slate-600"><span className="font-semibold text-slate-800">考查方式：</span>{item.examType}</p>
+              {item.subjectType ? <p className="rounded-xl bg-violet-50 p-3 text-violet-700"><span className="font-semibold">学科识别：</span>{item.subjectType}</p> : null}
+              {item.examPatterns?.length ? <p className="rounded-xl bg-amber-50 p-3 text-amber-800"><span className="font-semibold">考试题型：</span>{item.examPatterns.join('、')}</p> : null}
+              {item.formulas?.length ? <p className="rounded-xl bg-emerald-50 p-3 font-mono text-[13px] leading-6 text-emerald-700"><span className="font-sans font-semibold">公式/规则：</span>{item.formulas.join('；')}</p> : null}
+              {item.commonMistakes?.length ? <p className="rounded-xl bg-rose-50 p-3 text-rose-700"><span className="font-semibold">常见误区：</span>{item.commonMistakes.join('；')}</p> : null}
               {item.sourceEvidence ? <p className="rounded-xl bg-sky-50 p-3 text-sky-700"><span className="font-semibold">来源依据：</span>{item.sourceEvidence}</p> : null}
             </div>
           </article>

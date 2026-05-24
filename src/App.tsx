@@ -127,7 +127,7 @@ export default function App() {
   const handleReinforcement = () =>
     runWithLoading('AI 正在生成强化练习...', async () => {
       if (!result) return;
-      const generated = await generateReinforcementQuiz(result.weakKnowledgePoints);
+      const generated = await generateReinforcementQuiz(result.weakKnowledgePoints, questions, result);
       setReinforcementQuiz(generated);
       goToStep('reinforcement');
     });

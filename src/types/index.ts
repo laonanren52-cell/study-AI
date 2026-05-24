@@ -3,6 +3,15 @@ export type Difficulty = '简单' | '中等' | '较难';
 export type QuestionType = 'single' | 'judge' | 'short';
 export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx';
 export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen';
+export type SubjectType = '语文' | '数学' | '英语' | '物理' | '化学' | '生物' | '政治' | '历史' | '地理' | '通用';
+export type ExamQuestionPattern =
+  | '基础概念题'
+  | '公式套用题'
+  | '条件辨析题'
+  | '易错判断题'
+  | '材料分析题'
+  | '变式迁移题'
+  | '综合解答题';
 export type AppStep =
   | 'home'
   | 'material'
@@ -36,6 +45,11 @@ export interface KnowledgePoint {
   examType: string;
   sourceEvidence?: string;
   keywords?: string[];
+  subjectType?: SubjectType;
+  examPatterns?: ExamQuestionPattern[];
+  formulas?: string[];
+  commonMistakes?: string[];
+  keyMethods?: string[];
 }
 
 export interface QuizQuestion {
@@ -49,6 +63,13 @@ export interface QuizQuestion {
   difficulty: Difficulty;
   sourceEvidence?: string;
   qualityScore?: number;
+  examPattern?: ExamQuestionPattern;
+  scoringRubric?: string[];
+  solutionSteps?: string[];
+  optionExplanations?: Record<string, string>;
+  commonMistake?: string;
+  learningObjective?: string;
+  answerInputMode?: 'text' | 'image' | 'both';
 }
 
 export interface AIStatus {
@@ -69,6 +90,9 @@ export interface QuestionResult {
   maxScore: number;
   userAnswer: string;
   matchedKeywords?: string[];
+  matchedRubric?: string[];
+  missingRubric?: string[];
+  feedback?: string;
 }
 
 export interface QuizResult {
@@ -106,14 +130,35 @@ export interface ReviewPlanDay {
   duration: string;
   practiceCount: number;
   method: string;
+  mustRemember?: string[];
+  exampleTasks?: string[];
+  reinforcementTasks?: string[];
+  commonMistakes?: string[];
+  selfCheckCriteria?: string[];
+  checklist?: Array<{ id: string; text: string; done: boolean }>;
 }
 
 export interface ReinforcementQuestion {
   id: string;
-  question: string;
   knowledgePointTitle: string;
+  examPattern: ExamQuestionPattern;
+  question: string;
   hint: string;
   answer: string;
+  solutionSteps: string[];
+  scoringRubric: string[];
+  commonMistake: string;
+  sourceQuestionId?: string;
+  sourceEvidence?: string;
+  difficulty: Difficulty;
+}
+
+export interface ImageAnswer {
+  questionId: string;
+  imageDataUrl: string;
+  recognizedText?: string;
+  status: 'idle' | 'recognizing' | 'recognized' | 'failed';
+  error?: string;
 }
 
 export interface LearningReport {
