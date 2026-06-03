@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { ArrowRight, BadgeCheck, Bot, FileText, BookTemplate, Search, ExternalLink, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ContentType, KnowledgePoint, QuizSettings } from '../types';
 import QuizSettingsPanel from './QuizSettingsPanel';
@@ -11,6 +11,8 @@ interface KnowledgePointListProps {
   quizSettings: QuizSettings;
   setQuizSettings: (settings: QuizSettings) => void;
   onGenerateQuiz: () => void;
+  isGeneratingQuestions?: boolean;
+  generationError?: string;
   matchedKnowledgePoints?: StandardKnowledgePoint[];
   isLearning?: boolean;
   contentType?: ContentType;
@@ -26,7 +28,7 @@ const importanceClass = {
   低: 'bg-emerald-50 text-emerald-700 border-emerald-100',
 };
 
-export default function KnowledgePointList({ knowledgePoints, quizSettings, setQuizSettings, onGenerateQuiz, matchedKnowledgePoints = [], isLearning = false, contentType, examType, examQuestionCount = 0, cleanedTextPreview }: KnowledgePointListProps) {
+export default function KnowledgePointList({ knowledgePoints, quizSettings, setQuizSettings, onGenerateQuiz, isGeneratingQuestions, generationError, matchedKnowledgePoints = [], isLearning = false, contentType, examType, examQuestionCount = 0, cleanedTextPreview }: KnowledgePointListProps) {
   return (
     <section className="mx-auto max-w-7xl px-5 py-10">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
