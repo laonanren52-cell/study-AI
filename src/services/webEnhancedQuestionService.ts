@@ -1,4 +1,4 @@
-import type { Difficulty } from '../types';
+﻿import type { Difficulty } from '../types';
 import type { MaterialProfile } from './materialTopicService';
 
 export interface WebReference {
@@ -28,7 +28,9 @@ export async function getWebEnhancedReferenceContext(
 ): Promise<string> {
   if (!enabled || !searchProvider) return '';
   try {
-    const references = await searchProvider.search(buildWebEnhancedQuery(profile, difficulty));
+    const searchPromise = searchProvider.search(buildWebEnhancedQuery(profile, difficulty));
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("SEARCH_TIMEOUT")), 3000));
+    const references = await Promise.race([searchPromise, timeoutPromise]) as WebReference[];
     return references
       .slice(0, 3)
       .map((item, index) => `${index + 1}. ${item.title}：${item.summary}`)
