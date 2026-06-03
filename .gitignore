@@ -13,3 +13,8 @@ yarn-error.log*
 pnpm-debug.log*
 .DS_Store
 Thumbs.db
+
+# Bak files
+*.bak
+*.local.bak
+.build_version
