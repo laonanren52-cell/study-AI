@@ -308,13 +308,10 @@ export default function App() {
               console.log('[QUESTION_CONFIG]', {subject:safeSub,exam:safeExam,count:safeCnt,types:safeTP,ratio:safeDR});
               if (contentType==='exam'&&examQuestions.length>0) { setQuestions(examQuestions.map(q=>({...q,qualityScore:q.qualityScore??90}))); setAnswers([]); setAiStatus(getAIStatus()); goToStep('quiz'); return; }
               const ss={...quizSettings,subjectType:safeSub,examType:safeExam,questionCount:safeCnt,questionTypes:safeTP,difficultyRatio:safeDR};
-              console.log('[AI_REQUEST_START]');
               let gen=[];let notice='';
-              if(knowledgePoints.length>0){
-                try{const r=await generateQuizWithMeta(knowledgePoints,material.content,ss);gen=r.questions;notice=r.orchestratorResult.generationNotice;console.log('[GENERATED_QUESTIONS_RESULT]',gen.length);}catch(e){console.error('[GENERATE_QUESTIONS_FAILED]',e);}
-              }
-              if(gen.length===0){
-                console.warn('[USE_EMERGENCY_FALLBACK]');
+              // 直接使用本地题库，不调用 AI（避免卡死）
+              console.warn('[SKIP_AI_USE_FALLBACK_DIRECTLY]');
+              {
                 const kpl=knowledgePoints.length>0?knowledgePoints:mockExtractKnowledgePoints(material.content,safeSub);
                 const ft=inferMaterialTopic(material.content,kpl,safeSub);
                 if(!inferMaterialProfile(material.content,kpl,safeSub)) throw new Error('no profile');
