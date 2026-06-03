@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5188 --strictPort",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
+    "dev": "node watch.mjs",
+    "build": "node build.mjs",
+    "preview": "node preview.mjs",
     "typecheck": "tsc -b"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "latest",
     "postcss": "latest",
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^3.4.17",
+    "terser": "^5.48.0"
   }
 }

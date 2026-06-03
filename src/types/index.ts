@@ -1,8 +1,9 @@
-export type Importance = '高' | '中' | '低';
+﻿export type Importance = '高' | '中' | '低';
 export type Difficulty = '简单' | '中等' | '较难';
 export type QuestionType = 'single' | 'judge' | 'fill' | 'short' | 'solution' | 'material';
 export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx' | 'image';
-export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen';
+export type ContentType = 'material' | 'exam';
+export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen' | 'custom';
 export type SubjectType =
   | '语文'
   | '数学'
@@ -12,34 +13,7 @@ export type SubjectType =
   | '生物'
   | '政治'
   | '历史'
-  | '地理'
-  | '高等数学'
-  | '线性代数'
-  | '概率统计'
-  | '大学物理'
-  | '电路'
-  | '计算机'
-  | '程序设计'
-  | '数据结构'
-  | '操作系统'
-  | '计算机网络'
-  | '数据库'
-  | '经济学'
-  | '管理学'
-  | '会计学'
-  | '法学'
-  | '医学'
-  | '护理学'
-  | '机械'
-  | '哲学'
-  | '文学'
-  | '历史学'
-  | '理学'
-  | '工学'
-  | '农学'
-  | '艺术学'
-  | '交叉学科'
-  | '通用';
+  | '地理';
 export type ExamQuestionPattern =
   | '基础概念题'
   | '公式套用题'
@@ -62,12 +36,6 @@ export type ExamType =
   | '三模'
   | '中考'
   | '高考'
-  | '高职高考'
-  | '专升本'
-  | '考研'
-  | '大学课程考试'
-  | '考证'
-  | '竞赛'
   | '自定义';
 export type TrainingMode = '基础巩固' | '错题强化' | '考前冲刺' | '变式训练' | '母题改编';
 export type AppStep =
@@ -107,6 +75,8 @@ export interface QuizSettings {
   };
   questionTypes: QuestionType[];
   trainingMode: TrainingMode;
+  strictSourceMode?: boolean;
+  enableWebEnhancedQuestions?: boolean;
 }
 
 export interface KnowledgePoint {
@@ -125,17 +95,58 @@ export interface KnowledgePoint {
   keyMethods?: string[];
 }
 
+// 考点卡 - 把资料变成可命题结构
+export interface KnowledgeCard {
+  id: string;
+  title: string;
+  subject: SubjectType;
+  coreMeaning: string;
+  formulas?: string[];
+  rules?: string[];
+  conditions?: string[];
+  examMethods: ExamQuestionPattern[];
+  commonMistakes: string[];
+  sourceEvidence: string;
+}
+
+// 命题蓝图 - 说明考什么、怎么考
+export interface QuestionBlueprint {
+  id: string;
+  templateId?: string;
+  knowledgeCardId: string;
+  knowledgePoint: string;
+  examPattern: ExamQuestionPattern;
+  difficulty: Difficulty;
+  targetAbility: string;
+  requiredMethods: string[];
+  commonWrongMethods: string[];
+  scoringPoints: string[];
+  sourceEvidence: string;
+}
+
+// 题目质量审查
+export interface QuestionQualityReview {
+  questionId: string;
+  score: number;
+  problems: string[];
+  suggestions: string[];
+  passed: boolean;
+}
+
 export interface QuizQuestion {
   id: string;
+  subject?: SubjectType;
+  normalizedStemHash?: string;
   type: QuestionType;
   question: string;
   options?: string[];
   answer: string;
+  correctOptionLabel?: 'A' | 'B' | 'C' | 'D';
   explanation: string;
   knowledgePointId: string;
   difficulty: Difficulty;
   sourceEvidence?: string;
-  qualityScore?: number;
+  qualityScore: number;
   examPattern?: ExamQuestionPattern;
   scoringRubric?: string[];
   solutionSteps?: string[];
@@ -144,6 +155,13 @@ export interface QuizQuestion {
   learningObjective?: string;
   answerInputMode?: 'text' | 'image' | 'both';
   recommendedVariant?: string;
+  blueprintId?: string;
+  templateId?: string;
+  targetAbility?: string;
+  requiredMethods?: string[];
+  commonWrongMethods?: string[];
+  qualityReview?: QuestionQualityReview;
+  isLowQuality?: boolean;
 }
 
 export interface AIStatus {
@@ -191,7 +209,13 @@ export interface DiagnosisItem {
   question: string;
   knowledgePointTitle: string;
   userAnswer?: string;
-  reasonType: '概念混淆' | '关键词遗漏' | '应用场景判断错误' | '记忆不牢固' | '表达不完整';
+  reasonType:
+    | '概念不清'
+    | '公式误用'
+    | '象限判断错误'
+    | '计算失误'
+    | '审题错误'
+    | '材料理解偏差';
   diagnosis: string;
   correctUnderstanding: string;
   suggestion: string;
@@ -217,11 +241,14 @@ export interface ReviewPlanDay {
 
 export interface ReinforcementQuestion {
   id: string;
+  subject?: SubjectType;
+  normalizedStemHash?: string;
   knowledgePointTitle: string;
   examPattern: ExamQuestionPattern;
   question: string;
   hint: string;
   answer: string;
+  explanation?: string;
   solutionSteps: string[];
   scoringRubric: string[];
   commonMistake: string;
@@ -243,3 +270,5 @@ export interface LearningReport {
   markdown: string;
   createdAt: string;
 }
+
+

@@ -1,3 +1,47 @@
+﻿# CHANGELOG
+
+## v1.1.0 (2026-06-03) 智学闭环 Studio
+
+### 资料主题强绑定
+- MaterialProfile / sourceText / sourceFingerprint / preferredSubject 完善
+- 化学资料不会默认回落数学；三角函数资料只识别三角函数知识点
+- 识别失败返回 null，不再生成数学 fallback
+
+### 题目主题校验
+- verifyQuestionAgainstMaterial / verifyQuestionAgainstProfile / deduplicateQuestions
+- normalizedStemHash / normalizeQuestionStem 去重
+- 学科不一致、forbiddenTopics、化学资料出现数学内容均直接失败
+
+### fallback 题库修复
+- 不再所有失败 fallback 到数学，改按 subject/topic 选择
+- 补充地理、化学、生物、历史、政治等 fallback
+- 服务层补默认 templateId
+
+### 题目生成逻辑
+- 基于 MaterialProfile，strictSourceMode 默认开启
+- AI 题目生成后进入 verifier 和 dedup
+- 候选题按 questionCount * 2 生成再筛选
+
+### 复习强化训练修复
+- 强化训练页不空白
+- 没错题有资料时基于资料核心知识点生成强化题
+- 刷新成同类变式生成新题
+- 强化题经过 verifier 和 dedup
+
+### 地理学科支持
+- 支持自然地理、人文地理、区域地理
+- 不扩展到大学地理、GIS 专业课程
+
+### 移除 AI 引导答疑入口
+- 移除 SocraticTutor route 和 StepIndicator 中的 AI 答疑步骤
+
+### 报告优化
+- 家长可读，不暴露 sourceFingerprint / fallback / verifier 等开发词
+- 包含学习总览、掌握点、错因、强化训练、复习建议
+
+### 编码修复
+- reinforcementFactory.ts GBK 编码损坏全面修复
+- npm run build 通过
 # 更新记录
 
 ## 2026-05-24 考试设置与题目质量增强

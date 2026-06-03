@@ -1,13 +1,24 @@
-import { ArrowRight, BadgeCheck } from 'lucide-react';
-import type { KnowledgePoint, QuizSettings } from '../types';
+import React, { useState } from 'react';
+import { ArrowRight, BadgeCheck, Bot, FileText, BookTemplate, Search, ExternalLink, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import type { ContentType, KnowledgePoint, QuizSettings } from '../types';
 import QuizSettingsPanel from './QuizSettingsPanel';
+import LearningStatus from './LearningStatus';
+import type { StandardKnowledgePoint } from '../services/knowledgeBase';
+import { SUBJECT_SCOPE_NOTICE } from '../services/subjectConfig';
 
 interface KnowledgePointListProps {
   knowledgePoints: KnowledgePoint[];
   quizSettings: QuizSettings;
   setQuizSettings: (settings: QuizSettings) => void;
   onGenerateQuiz: () => void;
+  matchedKnowledgePoints?: StandardKnowledgePoint[];
+  isLearning?: boolean;
+  contentType?: ContentType;
+  examType?: string;
+  examQuestionCount?: number;
+  cleanedTextPreview?: string;
 }
+
 
 const importanceClass = {
   高: 'bg-rose-50 text-rose-700 border-rose-100',
@@ -15,7 +26,7 @@ const importanceClass = {
   低: 'bg-emerald-50 text-emerald-700 border-emerald-100',
 };
 
-export default function KnowledgePointList({ knowledgePoints, quizSettings, setQuizSettings, onGenerateQuiz }: KnowledgePointListProps) {
+export default function KnowledgePointList({ knowledgePoints, quizSettings, setQuizSettings, onGenerateQuiz, matchedKnowledgePoints = [], isLearning = false, contentType, examType, examQuestionCount = 0, cleanedTextPreview }: KnowledgePointListProps) {
   return (
     <section className="mx-auto max-w-7xl px-5 py-10">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -31,8 +42,73 @@ export default function KnowledgePointList({ knowledgePoints, quizSettings, setQ
       </div>
 
       <div className="mb-6">
+        <LearningStatus matchedPoints={matchedKnowledgePoints} isLearning={isLearning} />
+      </div>
+
+      <div className="mb-6">
         <QuizSettingsPanel settings={quizSettings} onChange={setQuizSettings} />
       </div>
+
+      {contentType === 'exam' && examQuestionCount > 0 ? (
+        <div className="mb-6 rounded-xl border-l-4 border-amber-500 bg-amber-50 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-5 w-5 text-amber-600" />
+            <h3 className="text-lg font-bold text-amber-800">AI 已识别到您上传的是真题试卷</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div className="bg-white rounded-lg p-3">
+              <div className="text-amber-600 font-medium">提取真题</div>
+              <div className="text-2xl font-bold text-gray-800">{examQuestionCount || 0} 道</div>
+            </div>
+            <div className="bg-white rounded-lg p-3">
+              <div className="text-amber-600 font-medium">试卷类型</div>
+              <div className="text-gray-700 font-medium">{examType || '考试试卷'}</div>
+            </div>
+            <div className="bg-white rounded-lg p-3">
+              <div className="text-amber-600 font-medium">预计答题时长</div>
+              <div className="text-2xl font-bold text-gray-800">{Math.ceil((examQuestionCount || 0) * 1.5)} 分钟</div>
+            </div>
+          </div>
+          <button
+            onClick={onGenerateQuiz}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 transition-colors"
+          >
+            开始做真题 <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
+      {contentType !== 'exam' || examQuestionCount === 0 ? (
+      <div className="mb-6 rounded-xl border-l-4 border-blue-500 bg-blue-50 p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Bot className="h-5 w-5 text-blue-600" />
+          <h3 className="text-lg font-bold text-blue-800">AI 已完成资料分析</h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+          <div className="bg-white rounded-lg p-3">
+            <div className="text-blue-600 font-medium">核心知识点</div>
+            <div className="text-2xl font-bold text-gray-800">{knowledgePoints.length} 个</div>
+          </div>
+          <div className="bg-white rounded-lg p-3">
+            <div className="text-blue-600 font-medium">重点考点</div>
+            <div className="text-gray-700">
+              {knowledgePoints.slice(0, 3).map((p, i) => (
+                <span key={i} className="inline-block bg-blue-100 text-blue-700 rounded px-2 py-0.5 mr-1 mb-1 text-xs">
+                  {p.title}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-3">
+            <div className="text-blue-600 font-medium">预计学习时长</div>
+            <div className="text-2xl font-bold text-gray-800">{Math.max(15, knowledgePoints.length * 5)} 分钟</div>
+          </div>
+          <div className="bg-white rounded-lg p-3">
+            <div className="text-blue-600 font-medium">推荐学习顺序</div>
+            <div className="text-gray-700 text-xs">基础概念 - 公式应用 - 综合练习</div>
+          </div>
+        </div>
+      </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {knowledgePoints.map((item) => (

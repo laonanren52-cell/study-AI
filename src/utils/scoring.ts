@@ -71,7 +71,18 @@ export const evaluateQuizAnswers = (
     const userAnswer = answerMap.get(question.id) ?? '';
     if (['short', 'fill', 'solution', 'material'].includes(question.type)) return evaluateShortAnswer(question, userAnswer, maxPerQuestion);
 
-    const isCorrect = normalizeAnswer(userAnswer) === normalizeAnswer(question.answer);
+    // 兼容统一答案格式：answer(全文) / correctOptionLabel(A/B/C/D) / 选项全文
+    const possibleCorrectAnswers = [
+      normalizeAnswer(question.answer || ''),
+    ];
+    if (question.correctOptionLabel && question.options) {
+      const labelIndex = question.correctOptionLabel.charCodeAt(0) - 65;
+      if (labelIndex >= 0 && labelIndex < question.options.length) {
+        possibleCorrectAnswers.push(normalizeAnswer(question.correctOptionLabel));
+        possibleCorrectAnswers.push(normalizeAnswer(question.options[labelIndex]));
+      }
+    }
+    const isCorrect = possibleCorrectAnswers.some(ca => ca && normalizeAnswer(userAnswer) === ca);
     return {
       questionId: question.id,
       isCorrect,

@@ -1,4 +1,5 @@
-import { Settings2 } from 'lucide-react';
+﻿import { Settings2 } from 'lucide-react';
+import { SUBJECT_DISPLAY_OPTIONS, EXAM_TYPE_DISPLAY_OPTIONS, SUBJECT_SCOPE_NOTICE, isSupportedDisplaySubject } from '../services/subjectConfig';
 import type { ExamType, QuestionType, QuizSettings, SubjectType, TrainingMode } from '../types';
 
 interface QuizSettingsPanelProps {
@@ -6,67 +7,6 @@ interface QuizSettingsPanelProps {
   onChange: (settings: QuizSettings) => void;
 }
 
-const subjects: Array<QuizSettings['subjectType']> = [
-  '自动识别',
-  '语文',
-  '数学',
-  '英语',
-  '物理',
-  '化学',
-  '生物',
-  '政治',
-  '历史',
-  '地理',
-  '高等数学',
-  '线性代数',
-  '概率统计',
-  '大学物理',
-  '电路',
-  '计算机',
-  '程序设计',
-  '数据结构',
-  '操作系统',
-  '计算机网络',
-  '数据库',
-  '经济学',
-  '管理学',
-  '会计学',
-  '法学',
-  '医学',
-  '护理学',
-  '机械',
-  '哲学',
-  '文学',
-  '历史学',
-  '理学',
-  '工学',
-  '农学',
-  '艺术学',
-  '交叉学科',
-  '通用',
-];
-const examTypes: ExamType[] = [
-  '自动识别',
-  '小测',
-  '单元测验',
-  '周测',
-  '月考',
-  '期中',
-  '期末',
-  '期中期末',
-  '一模',
-  '二模',
-  '三模',
-  '中考',
-  '高考',
-  '高职高考',
-  '专升本',
-  '考研',
-  '大学课程考试',
-  '考证',
-  '竞赛',
-  '自定义',
-];
 const counts: Array<5 | 10 | 15> = [5, 10, 15];
 const trainingModes: TrainingMode[] = ['基础巩固', '错题强化', '考前冲刺', '变式训练', '母题改编'];
 const questionTypeOptions: Array<{ value: QuestionType; label: string }> = [
@@ -89,9 +29,11 @@ export const defaultQuizSettings: QuizSettings = {
   },
   questionTypes: ['single', 'judge', 'short', 'solution'],
   trainingMode: '基础巩固',
+  strictSourceMode: true,
+  enableWebEnhancedQuestions: false,
 };
 
-const sliderAccentClass = {
+const sliderAccentClass: Record<string, string> = {
   emerald: 'accent-emerald-500',
   amber: 'accent-amber-500',
   rose: 'accent-rose-500',
@@ -105,7 +47,6 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
     medium: ratioTotal > 0 ? Math.round((settings.difficultyRatio.medium / ratioTotal) * 100) : 50,
     hard: ratioTotal > 0 ? Math.round((settings.difficultyRatio.hard / ratioTotal) * 100) : 30,
   };
-
   const updateDifficulty = (key: keyof QuizSettings['difficultyRatio'], value: number) => {
     update({
       difficultyRatio: {
@@ -114,12 +55,12 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
       },
     });
   };
-
   const toggleQuestionType = (type: QuestionType) => {
     const exists = settings.questionTypes.includes(type);
     const next = exists ? settings.questionTypes.filter((item) => item !== type) : [...settings.questionTypes, type];
     update({ questionTypes: next.length > 0 ? next : [type] });
   };
+  const showUnsupportedNotice = settings.subjectType !== '自动识别' && !isSupportedDisplaySubject(settings.subjectType);
 
   return (
     <div className="rounded-[2rem] bg-white p-5 ring-1 ring-slate-200/80 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
@@ -134,7 +75,49 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
         </div>
       </div>
 
+      {/* 范围提示 */}
+      <div className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm leading-6 text-emerald-700">
+        {SUBJECT_SCOPE_NOTICE}
+      </div>
+
+      {/* 非核心学科提示 */}
+      {showUnsupportedNotice ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800">
+          当前资料不属于初高中家教学科范围。请手动选择语文、数学、英语、物理、化学、生物、历史、政治或地理，或上传对应课程资料。
+        </div>
+      ) : null}
+
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <label className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 lg:col-span-2">
+          <input
+            type="checkbox"
+            checked={settings.strictSourceMode !== false}
+            onChange={(event) => update({ strictSourceMode: event.target.checked })}
+            className="mt-1 h-4 w-4 accent-sky-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">严格按上传资料出题</span>
+            <span className="mt-1 block text-sm leading-6 text-slate-600">
+              开启后，系统只围绕上传资料中的知识点生成题目；若资料范围较窄，可能少于设定题数，但不会跨章节补题。
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
+          <input
+            type="checkbox"
+            checked={settings.enableWebEnhancedQuestions === true}
+            onChange={(event) => update({ enableWebEnhancedQuestions: event.target.checked })}
+            className="mt-1 h-4 w-4 accent-sky-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">联网增强出题</span>
+            <span className="mt-1 block text-sm leading-6 text-slate-600">
+              默认关闭。开启后仅补充参考摘要；网络不可用时会自动降级，不影响按上传资料出题。
+            </span>
+          </span>
+        </label>
+
         <label className="block">
           <span className="text-sm font-medium text-slate-700">学科类型</span>
           <select
@@ -142,7 +125,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
             onChange={(event) => update({ subjectType: event.target.value as SubjectType | '自动识别' })}
             className="focus-ring mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
           >
-            {subjects.map((item) => <option key={item}>{item}</option>)}
+            {SUBJECT_DISPLAY_OPTIONS.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
 
@@ -153,7 +136,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
             onChange={(event) => update({ examType: event.target.value as ExamType })}
             className="focus-ring mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
           >
-            {examTypes.map((item) => <option key={item}>{item}</option>)}
+            {EXAM_TYPE_DISPLAY_OPTIONS.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
 
@@ -164,7 +147,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
               value={settings.customExamType ?? ''}
               onChange={(event) => update({ customExamType: event.target.value })}
               className="focus-ring mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-              placeholder="例如：广东高职高考语文专项"
+              placeholder="例如：广雅中学初三摸底测试"
             />
           </label>
         ) : null}
@@ -177,9 +160,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
                 key={count}
                 type="button"
                 onClick={() => update({ questionCount: count })}
-                className={`focus-ring rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                  settings.questionCount === count ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white'
-                }`}
+                className={"focus-ring rounded-2xl px-4 py-3 text-sm font-semibold transition " + (settings.questionCount === count ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white")}
               >
                 {count} 题
               </button>
@@ -194,10 +175,8 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
               <button
                 key={mode}
                 type="button"
-                onClick={() => update({ trainingMode: mode })}
-                className={`focus-ring rounded-2xl px-3 py-3 text-sm font-semibold transition ${
-                  settings.trainingMode === mode ? 'bg-sky-600 text-white' : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white'
-                }`}
+                onClick={() => update({ trainingMode: mode as TrainingMode })}
+                className={"focus-ring rounded-2xl px-3 py-3 text-sm font-semibold transition " + (settings.trainingMode === mode ? "bg-sky-600 text-white" : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white")}
               >
                 {mode}
               </button>
@@ -213,9 +192,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
                 key={item.value}
                 type="button"
                 onClick={() => toggleQuestionType(item.value)}
-                className={`focus-ring rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  settings.questionTypes.includes(item.value) ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white'
-                }`}
+                className={"focus-ring rounded-full px-4 py-2 text-sm font-semibold transition " + (settings.questionTypes.includes(item.value) ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white")}
               >
                 {item.label}
               </button>
@@ -249,7 +226,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
                     value={settings.difficultyRatio[key]}
                     onChange={(event) => updateDifficulty(key, Number(event.target.value))}
                     className="focus-ring w-16 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm font-semibold text-slate-900"
-                    aria-label={`${label}题比例`}
+                    aria-label={label + "题比例"}
                   />
                 </div>
                 <input
@@ -258,8 +235,8 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
                   max={100}
                   value={settings.difficultyRatio[key]}
                   onChange={(event) => updateDifficulty(key, Number(event.target.value))}
-                  className={`mt-3 h-2 w-full cursor-pointer ${sliderAccentClass[tone]}`}
-                  aria-label={`${label}题滑动比例`}
+                  className={"mt-3 h-2 w-full cursor-pointer " + sliderAccentClass[tone]}
+                  aria-label={label + "题滑动比例"}
                 />
               </div>
             ))}

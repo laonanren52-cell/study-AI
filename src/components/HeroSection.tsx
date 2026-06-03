@@ -1,5 +1,8 @@
+﻿import { Play } from 'lucide-react';
+
 interface HeroSectionProps {
   onStart: () => void;
+  onDemoRun?: () => void;
 }
 
 const flowItems = [
@@ -23,11 +26,11 @@ const compactBlocks = [
   {
     label: '使用场景',
     title: '面向真实备考现场',
-    items: ['期末复习', '随堂测', '考证备考', '题库生成'],
+    items: ['期末复习', '随堂测', '备考训练', '题库生成'],
   },
 ];
 
-export default function HeroSection({ onStart }: HeroSectionProps) {
+export default function HeroSection({ onStart, onDemoRun }: HeroSectionProps) {
   return (
     <section className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:py-20">
       <div className="pointer-events-none absolute left-1/2 top-10 -z-10 h-[420px] w-[min(760px,90vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_center,_rgba(125,211,252,0.22),_rgba(16,185,129,0.10)_42%,_transparent_72%)]" />
@@ -44,7 +47,7 @@ export default function HeroSection({ onStart }: HeroSectionProps) {
           基于 AI 的学习资料智能测评与个性化复习工具
         </p>
         <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-slate-500 sm:text-base">
-          把资料导入、考点提取、在线测评、错因诊断、复习计划和强化训练收束成一个清晰的备考闭环。
+          帮助家教老师把课后反馈从 40-60 分钟压缩到几分钟。重点支持初高中语文、数学、英语、物理、化学、生物六大核心学科，兼顾历史、政治与地理学科训练。
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -53,6 +56,16 @@ export default function HeroSection({ onStart }: HeroSectionProps) {
             className="group focus-ring inline-flex min-h-12 items-center gap-4 rounded-full bg-[#07111f] px-6 py-3 text-base font-semibold text-white ring-1 ring-slate-950/10 shadow-[0_22px_58px_rgba(7,17,31,0.30)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 active:scale-[0.98]"
           >
             开始体验
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/12 transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-1 group-hover:-translate-y-[1px] group-hover:bg-white/18">
+              →
+            </span>
+          </button>
+          <button
+            onClick={onDemoRun}
+            className="group focus-ring inline-flex min-h-12 items-center gap-3 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-base font-semibold text-white ring-1 ring-purple-500/20 shadow-[0_22px_58px_rgba(124,58,237,0.25)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 active:scale-[0.98]"
+          >
+            <Play className="h-4 w-4" />
+            一键路演
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/12 transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-1 group-hover:-translate-y-[1px] group-hover:bg-white/18">
               →
             </span>
@@ -70,9 +83,6 @@ export default function HeroSection({ onStart }: HeroSectionProps) {
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-700">Learning Loop Console</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">一屏看懂学习闭环</h2>
             </div>
-            <p className="max-w-xl text-sm leading-6 text-slate-500">
-              保留路演需要的关键信息，不堆砌模块，让评委第一眼看到“资料驱动、测评闭环、复习落地”。
-            </p>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-4">

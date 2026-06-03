@@ -4,11 +4,13 @@ import type { ReinforcementQuestion } from '../types';
 
 interface ReinforcementQuizProps {
   reinforcementQuiz: ReinforcementQuestion[];
+  onGenerate: () => void;
   onRefresh: () => void;
   onReport: () => void;
+  error?: string;
 }
 
-export default function ReinforcementQuiz({ reinforcementQuiz, onRefresh, onReport }: ReinforcementQuizProps) {
+export default function ReinforcementQuiz({ reinforcementQuiz, onGenerate, onRefresh, onReport, error }: ReinforcementQuizProps) {
   const [visibleAnswers, setVisibleAnswers] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [mastery, setMastery] = useState<Record<string, 'mastered' | 'review'>>({});
@@ -22,9 +24,13 @@ export default function ReinforcementQuiz({ reinforcementQuiz, onRefresh, onRepo
         <div>
           <p className="text-sm font-semibold text-sky-700">错因驱动变式训练</p>
           <h2 className="mt-2 text-3xl font-semibold text-slate-950">二次强化训练：同类变式与错因修复</h2>
-          <p className="mt-2 text-slate-600">题目来自薄弱知识点和错题题型，默认隐藏答案，先作答再对照标准步骤和得分点。</p>
+          <p className="mt-2 text-slate-600">根据当前错题和上传资料生成同知识点变式题，帮助学生完成课后巩固。</p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <button onClick={onGenerate} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700">
+            <RotateCcw className="h-5 w-5" />
+            生成强化练习
+          </button>
           <button onClick={onRefresh} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 shadow-sm hover:border-sky-200 hover:bg-sky-50">
             <RotateCcw className="h-5 w-5" />
             刷新生成同类变式
@@ -35,6 +41,16 @@ export default function ReinforcementQuiz({ reinforcementQuiz, onRefresh, onRepo
           </button>
         </div>
       </div>
+
+      {error ? (
+        <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">{error}</p>
+      ) : null}
+
+      {reinforcementQuiz.length === 0 && !error ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm leading-6 text-slate-600">
+          还没有强化题。请点击【生成强化练习】。
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         {reinforcementQuiz.map((item, index) => (

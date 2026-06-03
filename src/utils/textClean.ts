@@ -1,6 +1,9 @@
+﻿import { cleanExtractedText as deepCleanText, isLikelyXmlGarbage } from './textCleaner';
 const DEMO_TEXT_LIMIT = 30000;
 
 export const cleanExtractedText = (rawText: string): string => {
+  const deepCleaned = deepCleanText(rawText);
+  if (deepCleaned !== rawText && deepCleaned.length > 10) return deepCleaned;
   const normalized = rawText
     .replace(/\r/g, '\n')
     .replace(/[ \t\u00a0]+/g, ' ')
@@ -27,3 +30,6 @@ export const formatFileSize = (bytes: number): string => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
+
+
+export { deepCleanText, isLikelyXmlGarbage };
