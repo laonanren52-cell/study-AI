@@ -1,15 +1,16 @@
 import { Bot, BookOpen, Check, Clipboard, Download, FileText, FileType2, Printer, Users } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   DiagnosisItem,
   KnowledgePoint,
   LearningReport,
   MaterialInput,
+  QuizQuestion,
   QuizResult,
   ReinforcementQuestion,
   ReviewPlanDay,
 } from '../types';
-import { downloadMarkdown, downloadWordReport, generateLearningReport } from '../services/reportService';
+import { downloadMarkdown, downloadWordReport, generateAIEnhancedLearningReport, generateLearningReport } from '../services/reportService';
 import { formatFileSize } from '../utils/textClean';
 import type { MaterialProfile } from '../services/materialTopicService';
 
@@ -20,6 +21,7 @@ interface ReportExportProps {
   diagnosis: DiagnosisItem[];
   reviewPlan: ReviewPlanDay[];
   reinforcementQuiz: ReinforcementQuestion[];
+  questions?: QuizQuestion[];
   onExport?: (type: 'student' | 'teacher' | 'blank') => void;
   materialProfile?: MaterialProfile | null;
 }
@@ -50,7 +52,20 @@ function extractWeakPoints(diagnosis: DiagnosisItem[]): string[] {
 
 export default function ReportExport(props: ReportExportProps) {
   const [copied, setCopied] = useState(false);
-  const report: LearningReport = useMemo(() => generateLearningReport(props), [props]);
+  const [reportType, setReportType] = useState<'student' | 'teacher' | 'blank'>('student');
+  const reportParams = useMemo(() => ({ ...props, reportType }), [
+    props.material,
+    props.knowledgePoints,
+    props.result,
+    props.diagnosis,
+    props.reviewPlan,
+    props.reinforcementQuiz,
+    props.questions,
+    props.materialProfile,
+    reportType,
+  ]);
+  const fallbackReport: LearningReport = useMemo(() => generateLearningReport(reportParams), [reportParams]);
+  const [report, setReport] = useState<LearningReport>(fallbackReport);
   const weakPoints = useMemo(() => extractWeakPoints(props.diagnosis), [props.diagnosis]);
   const sourceItems = [
     ['输入方式', props.material.sourceType === 'sample' ? '示例资料' : props.material.sourceType === 'file' ? '文件上传' : '文本粘贴'],
@@ -66,6 +81,22 @@ export default function ReportExport(props: ReportExportProps) {
     await navigator.clipboard.writeText(report.markdown);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setReport(fallbackReport);
+    generateAIEnhancedLearningReport(reportParams).then((nextReport) => {
+      if (!cancelled) setReport(nextReport);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fallbackReport, reportParams]);
+
+  const switchReportType = (type: 'student' | 'teacher' | 'blank') => {
+    setReportType(type);
+    props.onExport?.(type);
   };
 
   return (
@@ -116,7 +147,7 @@ export default function ReportExport(props: ReportExportProps) {
           {/* 批量导出选项 */}
           <div className="mt-4 grid grid-cols-3 gap-3">
             <button
-              onClick={() => props.onExport?.('student')}
+              onClick={() => switchReportType('student')}
               className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50 transition-colors"
             >
               <FileText className="h-6 w-6 text-blue-600" />
@@ -124,7 +155,7 @@ export default function ReportExport(props: ReportExportProps) {
               <span className="text-xs text-slate-400">题目+答案+解析</span>
             </button>
             <button
-              onClick={() => props.onExport?.('teacher')}
+              onClick={() => switchReportType('teacher')}
               className="flex flex-col items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 p-4 hover:bg-purple-100 transition-colors"
             >
               <Users className="h-6 w-6 text-purple-600" />
@@ -132,7 +163,7 @@ export default function ReportExport(props: ReportExportProps) {
               <span className="text-xs text-purple-400">学情+统计+建议</span>
             </button>
             <button
-              onClick={() => props.onExport?.('blank')}
+              onClick={() => switchReportType('blank')}
               className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50 transition-colors"
             >
               <Printer className="h-6 w-6 text-slate-600" />
@@ -154,6 +185,12 @@ export default function ReportExport(props: ReportExportProps) {
               <p className="mt-2 text-slate-500">生成时间：{report.createdAt}</p>
             </div>
 
+            {reportType === 'blank' ? (
+              <pre className="mt-5 whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 font-sans text-sm leading-7 text-slate-800">
+                {report.markdown}
+              </pre>
+            ) : (
+              <>
             {/* AI 学习总结卡片 */}
             <div className="mb-6 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
               <div className="flex items-center gap-2 mb-4">
@@ -312,6 +349,8 @@ export default function ReportExport(props: ReportExportProps) {
                 </div>
               ))}
             </div>
+              </>
+            )}
           </div>
         </div>
       </div>

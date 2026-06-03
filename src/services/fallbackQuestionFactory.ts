@@ -14,7 +14,7 @@ import type {
   Difficulty,
 } from '../types';
 import type { MaterialTopic } from './materialTopicService';
-import { deduplicateQuestions, verifyQuestionTopicAlignment } from './questionTopicVerifier';
+import { normalizedStemHash, verifyQuestionTopicAlignment } from './questionTopicVerifier';
 
 // ========== 学科判断 ==========
 
@@ -74,7 +74,7 @@ const TRIG_BASIC_QUESTIONS: Array<{ q: string; opts: string[]; ans: string; ansI
     tags: ['sin', 'cos'],
   },
   {
-    q: '下列等式中，恒成立的是（  ）',
+    q: '在同角三角函数化简中，若 α 为任意角且表达式有意义，下列等式恒成立的是（  ）',
     opts: ['A. sin²α + cos²α = 1', 'B. sin²α - cos²α = 1', 'C. sinα + cosα = 1', 'D. tanα × cotα = 0'],
     ans: 'A. sin²α + cos²α = 1', ansIdx: 0, pattern: '基础概念题' as ExamQuestionPattern,
     steps: ['A是同角三角函数平方关系，恒成立', 'B、C、D均不恒成立'],
@@ -143,7 +143,7 @@ const GENERAL_MATH_QUESTIONS: Array<{ q: string; opts: string[]; ans: string; an
     tags: ['三角函数', '周期'],
   },
   {
-    q: 'sin 210° 的值等于（  ）',
+    q: '已知 210° 位于第三象限，且参考角为 30°，则 sin 210° 的值等于（  ）',
     opts: ['A. -1/2', 'B. 1/2', 'C. -√3/2', 'D. √3/2'],
     ans: 'A. -1/2', ansIdx: 0, pattern: '基础概念题' as ExamQuestionPattern,
     steps: ['210°在第三象限', 'sin210°=-sin30°=-1/2'],
@@ -159,15 +159,15 @@ const QUADRATIC_QUESTIONS: typeof GENERAL_MATH_QUESTIONS = [
 ];
 
 const EQUATION_QUESTIONS: typeof GENERAL_MATH_QUESTIONS = [
-  { q: '解方程 3x-7=11，x 的值为（  ）', opts: ['A. 6', 'B. 4', 'C. -6', 'D. -4'], ans: 'A. 6', ansIdx: 0, pattern: '公式套用题', steps: ['移项得3x=18', '两边除以3得x=6'], mistake: '移项时符号错误', tags: ['方程', '移项', '未知数'] },
+  { q: '某同学解一元一次方程 3x-7=11，需要先移项再合并同类项，则 x 的值为（  ）', opts: ['A. 6', 'B. 4', 'C. -6', 'D. -4'], ans: 'A. 6', ansIdx: 0, pattern: '公式套用题', steps: ['移项得3x=18', '两边除以3得x=6'], mistake: '移项时符号错误', tags: ['方程', '移项', '未知数'] },
   { q: '方程组 x+y=7，x-y=1 的解为（  ）', opts: ['A. x=4,y=3', 'B. x=3,y=4', 'C. x=6,y=1', 'D. x=1,y=6'], ans: 'A. x=4,y=3', ansIdx: 0, pattern: '条件辨析题', steps: ['两式相加得2x=8', 'x=4', '代回得y=3'], mistake: '消元后代回错误', tags: ['方程组', '消元', '未知数'] },
   { q: '不等式 2x+3>9 的解集为（  ）', opts: ['A. x>3', 'B. x<3', 'C. x>6', 'D. x<6'], ans: 'A. x>3', ansIdx: 0, pattern: '公式套用题', steps: ['移项得2x>6', '除以正数2，不等号方向不变', 'x>3'], mistake: '不等号方向判断错误', tags: ['不等式', '移项', '解集'] },
 ];
 
 const GEOMETRY_QUESTIONS: typeof GENERAL_MATH_QUESTIONS = [
   { q: '在直角三角形 ABC 中，∠C=90°，AC=3，BC=4，则 AB 的长度为（  ）', opts: ['A. 5', 'B. 6', 'C. 7', 'D. 8'], ans: 'A. 5', ansIdx: 0, pattern: '公式套用题', steps: ['使用勾股定理AB²=AC²+BC²', 'AB²=9+16=25', 'AB=5'], mistake: '混淆直角边与斜边', tags: ['几何', '三角形', '定理'] },
-  { q: '若两个三角形的两组对应角分别相等，则这两个三角形（  ）', opts: ['A. 相似', 'B. 全等', 'C. 面积一定相等', 'D. 周长一定相等'], ans: 'A. 相似', ansIdx: 0, pattern: '条件辨析题', steps: ['两组对应角相等可判定两三角形相似', '不能直接推出全等'], mistake: '混淆相似与全等判定', tags: ['几何', '三角形', '相似'] },
-  { q: '圆的半径为 3，则该圆的面积为（  ）', opts: ['A. 9π', 'B. 6π', 'C. 3π', 'D. 18π'], ans: 'A. 9π', ansIdx: 0, pattern: '公式套用题', steps: ['圆面积S=πr²', '代入r=3得S=9π'], mistake: '混淆圆面积与周长公式', tags: ['几何', '圆', '面积'] },
+  { q: '在△ABC 和△DEF 中，已知∠A=∠D、∠B=∠E，仅凭这两组对应角相等，可判断两个三角形（  ）', opts: ['A. 相似', 'B. 全等', 'C. 面积一定相等', 'D. 周长一定相等'], ans: 'A. 相似', ansIdx: 0, pattern: '条件辨析题', steps: ['两组对应角相等可判定两三角形相似', '不能直接推出全等'], mistake: '混淆相似与全等判定', tags: ['几何', '三角形', '相似'] },
+  { q: '在圆形花坛设计中，若花坛半径为 3 米，则该圆形花坛的面积为（  ）', opts: ['A. 9π', 'B. 6π', 'C. 3π', 'D. 18π'], ans: 'A. 9π', ansIdx: 0, pattern: '公式套用题', steps: ['圆面积S=πr²', '代入r=3得S=9π'], mistake: '混淆圆面积与周长公式', tags: ['几何', '圆', '面积'] },
 ];
 
 // ========== 主入口 ==========
@@ -238,11 +238,14 @@ export const generateFallbackQuestionsFromBlueprints = (
     result.push(question);
   }
 
-  return deduplicateQuestions(result.filter((question) => {
+  return result.filter((question) => {
     if (materialTopic && materialTopic.topicTag !== '通用知识' && !verifyQuestionTopicAlignment(question, materialTopic).passed) {
       return false;
     }
     return true;
+  }).map((question) => ({
+    ...question,
+    normalizedStemHash: normalizedStemHash(question.question),
   }));
 };
 
@@ -334,8 +337,8 @@ const buildMathFallbackQuestion = (
 // ========== 语文类 ==========
 
 const CHINESE_QUESTIONS: Array<{ q: string; opts: string[]; ans: string; ansIdx: number; pattern: ExamQuestionPattern; steps: string[]; mistake: string }> = [
-  { q: '下列各句中，标点符号使用正确的一项是（  ）', opts: ['A. "到底去不去？"小明问。', 'B. 我喜欢读《读者》、《青年文摘》等杂志。', 'C. "好，"他笑着说，"我答应你。"', 'D. 她终于明白了：原来如此！'], ans: 'D. 她终于明白了：原来如此！', ansIdx: 3, pattern: '基础概念题' as ExamQuestionPattern, steps: ['A中问号应在引号内', 'B中顿号多余', 'C中逗号应在引号内', 'D正确'], mistake: '引号与标点位置混淆' },
-  { q: '下列句子中，没有语病的一项是（  ）', opts: ['A. 通过这次学习，使我的认识有了很大提高。', 'B. 能否坚持锻炼是身体健康的重要保证。', 'C. 我们要养成认真读书的习惯。', 'D. 这篇文章的内容和见解都很丰富。'], ans: 'C. 我们要养成认真读书的习惯。', ansIdx: 2, pattern: '基础概念题' as ExamQuestionPattern, steps: ['A缺主语', 'B两面对一面', 'C正确', 'D搭配不当'], mistake: '未能识别成分残缺' },
+  { q: '在修改作文片段时，需要判断引号和冒号的用法。下列各句中，标点符号使用正确的一项是（  ）', opts: ['A. "到底去不去？"小明问。', 'B. 我喜欢读《读者》、《青年文摘》等杂志。', 'C. "好，"他笑着说，"我答应你。"', 'D. 她终于明白了：原来如此！'], ans: 'D. 她终于明白了：原来如此！', ansIdx: 3, pattern: '基础概念题' as ExamQuestionPattern, steps: ['A中问号应在引号内', 'B中顿号多余', 'C中逗号应在引号内', 'D正确'], mistake: '引号与标点位置混淆' },
+  { q: '老师要求修改病句并保留原意，下列四个句子中，没有语病的一项是（  ）', opts: ['A. 通过这次学习，使我的认识有了很大提高。', 'B. 能否坚持锻炼是身体健康的重要保证。', 'C. 我们要养成认真读书的习惯。', 'D. 这篇文章的内容和见解都很丰富。'], ans: 'C. 我们要养成认真读书的习惯。', ansIdx: 2, pattern: '基础概念题' as ExamQuestionPattern, steps: ['A缺主语', 'B两面对一面', 'C正确', 'D搭配不当'], mistake: '未能识别成分残缺' },
   { q: '阅读诗句“春风又绿江南岸”，其中“绿”字的表达效果最恰当的是（  ）', opts: ['A. 化静为动，写出春风使江南焕发生机', 'B. 说明江岸只剩绿色', 'C. 强调春风颜色鲜艳', 'D. 表达诗人对夏日炎热的不满'], ans: 'A. 化静为动，写出春风使江南焕发生机', ansIdx: 0, pattern: '材料分析题', steps: ['联系诗句语境', '分析“绿”字的动词用法', '判断表达效果'], mistake: '只解释字面意思，忽略炼字效果' },
 ];
 
@@ -379,7 +382,7 @@ const buildPhysicsFallbackQuestion = (bp: QuestionBlueprint, card: KnowledgeCard
 // ========== 化学类 ==========
 
 const CHEMISTRY_QUESTIONS: Array<{ q: string; opts: string[]; ans: string; ansIdx: number; pattern: ExamQuestionPattern; steps: string[]; mistake: string }> = [
-  { q: '下列化学方程式中，正确的是（  ）', opts: ['A. 2H₂ + O₂ = 2H₂O', 'B. H₂ + O₂ = H₂O', 'C. 2H₂ + O₂ → H₂O', 'D. H₂ + O₂ → 2H₂O'], ans: 'A. 2H₂ + O₂ = 2H₂O', ansIdx: 0, pattern: '基础概念题' as ExamQuestionPattern, steps: ['检查配平', '检查产物', '检查反应条件'], mistake: '配平系数错误' },
+  { q: '在氢气和氧气点燃生成水的反应中，需要同时检查反应物、生成物和配平。下列化学方程式正确的是（  ）', opts: ['A. 2H₂ + O₂ = 2H₂O', 'B. H₂ + O₂ = H₂O', 'C. 2H₂ + O₂ → H₂O', 'D. H₂ + O₂ → 2H₂O'], ans: 'A. 2H₂ + O₂ = 2H₂O', ansIdx: 0, pattern: '基础概念题' as ExamQuestionPattern, steps: ['检查配平', '检查产物', '检查反应条件'], mistake: '配平系数错误' },
   { q: '在无色透明的溶液中，能大量共存的是（  ）', opts: ['A. Fe³⁺、Cl⁻、SO₄²⁻', 'B. Cu²⁺、NO₃⁻、Cl⁻', 'C. K⁺、OH⁻、NO₃⁻', 'D. H⁺、CO₃²⁻、Na⁺'], ans: 'C. K⁺、OH⁻、NO₃⁻', ansIdx: 2, pattern: '条件辨析题' as ExamQuestionPattern, steps: ['A中Fe³⁺有色', 'B中Cu²⁺有色', 'C无色且不反应', 'D中H⁺与CO₃²⁻反应'], mistake: '忽略溶液颜色或离子反应' },
   { q: '在一定温度下，CH₃COOH 溶液中存在电离平衡。加入少量 CH₃COONa 固体后，CH₃COOH 的电离程度将（  ）', opts: ['A. 减小', 'B. 增大', 'C. 不变', 'D. 先增大后减小'], ans: 'A. 减小', ansIdx: 0, pattern: '条件辨析题', steps: ['CH₃COONa提供CH₃COO⁻', '同离子效应使电离平衡向左移动', '弱酸电离程度减小'], mistake: '忽略同离子效应对电离平衡的影响' },
 ];
@@ -395,8 +398,8 @@ const buildChemistryFallbackQuestion = (bp: QuestionBlueprint, card: KnowledgeCa
 
 const BIOLOGY_QUESTIONS: Array<{ q: string; opts: string[]; ans: string; ansIdx: number; pattern: ExamQuestionPattern; steps: string[]; mistake: string }> = [
   { q: '在孟德尔分离定律中，一对相对性状的杂合子自交，后代表现型比例为（  ）', opts: ['A. 1:1', 'B. 3:1', 'C. 9:3:3:1', 'D. 1:2:1'], ans: 'B. 3:1', ansIdx: 1, pattern: '基础概念题' as ExamQuestionPattern, steps: ['Aa × Aa → AA:Aa:aa = 1:2:1', '显性:隐性 = 3:1'], mistake: '混淆分离比与自由组合比' },
-  { q: '绿色植物光合作用的主要场所是（  ）', opts: ['A. 线粒体', 'B. 叶绿体', 'C. 内质网', 'D. 高尔基体'], ans: 'B. 叶绿体', ansIdx: 1, pattern: '基础概念题' as ExamQuestionPattern, steps: ['光合作用在叶绿体中进行', '线粒体是有氧呼吸场所'], mistake: '混淆不同细胞器的功能' },
-  { q: 'DNA分子的基本组成单位是（  ）', opts: ['A. 核糖核苷酸', 'B. 脱氧核糖核苷酸', 'C. 氨基酸', 'D. 单糖'], ans: 'B. 脱氧核糖核苷酸', ansIdx: 1, pattern: '基础概念题' as ExamQuestionPattern, steps: ['DNA组成单位是脱氧核糖核苷酸', 'RNA组成单位是核糖核苷酸'], mistake: '混淆DNA与RNA的基本组成单位' },
+  { q: '在观察绿色植物叶肉细胞结构时，若要判断光合作用发生的主要场所，应选择（  ）', opts: ['A. 线粒体', 'B. 叶绿体', 'C. 内质网', 'D. 高尔基体'], ans: 'B. 叶绿体', ansIdx: 1, pattern: '基础概念题' as ExamQuestionPattern, steps: ['光合作用在叶绿体中进行', '线粒体是有氧呼吸场所'], mistake: '混淆不同细胞器的功能' },
+  { q: '学习遗传物质结构时，若题目要求判断 DNA 分子的基本组成单位，应选择（  ）', opts: ['A. 核糖核苷酸', 'B. 脱氧核糖核苷酸', 'C. 氨基酸', 'D. 单糖'], ans: 'B. 脱氧核糖核苷酸', ansIdx: 1, pattern: '基础概念题' as ExamQuestionPattern, steps: ['DNA组成单位是脱氧核糖核苷酸', 'RNA组成单位是核糖核苷酸'], mistake: '混淆DNA与RNA的基本组成单位' },
   { q: '某植物进行光合作用实验时，先在黑暗处放置 24 小时，再进行照光处理。暗处理的主要目的是（  ）', opts: ['A. 消耗叶片中原有淀粉', 'B. 增加叶片中叶绿素含量', 'C. 促进根部吸收无机盐', 'D. 提高植物呼吸速率'], ans: 'A. 消耗叶片中原有淀粉', ansIdx: 0, pattern: '材料分析题', steps: ['暗处理期间植物不能进行光合作用', '呼吸作用消耗原有淀粉', '排除实验前淀粉干扰'], mistake: '没有理解暗处理对实验变量的控制作用' },
 ];
 
@@ -410,7 +413,7 @@ const buildBiologyFallbackQuestion = (bp: QuestionBlueprint, card: KnowledgeCard
 // ========== 地理类 ==========
 
 const GEOGRAPHY_QUESTIONS: Array<{ q: string; opts: string[]; ans: string; ansIdx: number; pattern: ExamQuestionPattern; steps: string[]; mistake: string }> = [
-  { q: '某地等高线地形图中，甲处等高线比乙处密集。关于坡度的判断，正确的是（  ）', opts: ['A. 甲处坡度较陡', 'B. 乙处坡度较陡', 'C. 两处坡度相同', 'D. 无法根据等高线判断'], ans: 'A. 甲处坡度较陡', ansIdx: 0, pattern: '条件辨析题', steps: ['读取等高线疏密', '等高线越密集坡度越陡', '判断甲处坡度较陡'], mistake: '混淆等高线疏密与坡度关系' },
+  { q: '某地等高线地形图中，甲处等高线比乙处密集。根据等高线疏密与坡度的关系，应判断（  ）', opts: ['A. 甲处坡度较陡', 'B. 乙处坡度较陡', 'C. 两处坡度相同', 'D. 无法根据等高线判断'], ans: 'A. 甲处坡度较陡', ansIdx: 0, pattern: '条件辨析题', steps: ['读取等高线疏密', '等高线越密集坡度越陡', '判断甲处坡度较陡'], mistake: '混淆等高线疏密与坡度关系' },
   { q: '分析某区域农业发展条件时，下列属于自然地理条件的是（  ）', opts: ['A. 气候与河流水源', 'B. 市场需求与交通', 'C. 劳动力数量', 'D. 政策支持'], ans: 'A. 气候与河流水源', ansIdx: 0, pattern: '材料分析题', steps: ['区分自然与人文因素', '气候和河流属于自然条件', '选择A'], mistake: '自然因素与人文因素混淆' },
   { q: '某城市位于河流交汇处且交通便利。该城市早期形成和发展的主要区位优势是（  ）', opts: ['A. 水运和交通条件较好', 'B. 矿产资源一定丰富', 'C. 海拔一定较高', 'D. 气候一定寒冷'], ans: 'A. 水运和交通条件较好', ansIdx: 0, pattern: '材料分析题', steps: ['提取河流交汇和交通便利', '对应城市区位条件', '形成结论'], mistake: '脱离材料添加不存在的区域条件' },
   { q: '某地 1 月均温 5℃，7 月均温 27℃，年降水量约 900mm，降水集中在夏季。该地最可能属于（  ）', opts: ['A. 亚热带季风气候', 'B. 热带雨林气候', 'C. 温带海洋性气候', 'D. 地中海气候'], ans: 'A. 亚热带季风气候', ansIdx: 0, pattern: '材料分析题', steps: ['分析冬夏气温特点', '识别降水集中在夏季', '判断为亚热带季风气候'], mistake: '只看降水总量，忽略季节分配' },
@@ -456,8 +459,8 @@ const buildPoliticsFallbackQuestion = (bp: QuestionBlueprint, card: KnowledgeCar
 // ========== 通用 fallback ==========
 
 const GENERAL_QUESTIONS: Array<{ q: string; opts: string[]; ans: string; ansIdx: number; pattern: ExamQuestionPattern; steps: string[]; mistake: string }> = [
-  { q: '根据资料，关于核心概念的理解正确的一项是（  ）', opts: ['A. 概念需要在具体语境中理解', 'B. 概念可以脱离材料独立判断', 'C. 概念的理解不需要原文依据', 'D. 概念只有一个固定不变的解释'], ans: 'A. 概念需要在具体语境中理解', ansIdx: 0, pattern: '基础概念题' as ExamQuestionPattern, steps: ['定位材料中的定义', '结合语境分析', '判断是否符合材料本意'], mistake: '脱离材料凭主观印象判断' },
-  { q: '下列推断符合材料原意的是（  ）', opts: ['A. 材料中的观点建立在充分证据之上', 'B. 材料的主要目的是介绍背景信息', 'C. 作者对论述话题持否定态度', 'D. 结论与前提之间存在逻辑矛盾'], ans: 'A. 材料中的观点建立在充分证据之上', ansIdx: 0, pattern: '材料分析题' as ExamQuestionPattern, steps: ['找出材料主旨', '分析论据与结论的关系', '判断选项是否符合推理逻辑'], mistake: '过度推断或偷换概念' },
+  { q: '阅读资料中给出的具体定义和适用条件后，若要判断该概念能否脱离材料使用，应选择（  ）', opts: ['A. 必须结合具体语境和资料依据理解', 'B. 可以完全脱离材料独立判断', 'C. 不需要原文依据也能判定', 'D. 只有一个固定不变的解释'], ans: 'A. 必须结合具体语境和资料依据理解', ansIdx: 0, pattern: '基础概念题' as ExamQuestionPattern, steps: ['定位材料中的定义', '结合语境分析', '判断是否符合材料本意'], mistake: '脱离材料凭主观印象判断' },
+  { q: '阅读资料中“原因—结论”的论述片段后，需要判断论据与结论的关系，应选择（  ）', opts: ['A. 观点需要由材料中的具体证据支撑', 'B. 材料的主要目的只是介绍背景信息', 'C. 作者一定对论述话题持否定态度', 'D. 结论与前提之间必然存在矛盾'], ans: 'A. 观点需要由材料中的具体证据支撑', ansIdx: 0, pattern: '材料分析题' as ExamQuestionPattern, steps: ['找出材料主旨', '分析论据与结论的关系', '判断选项是否符合推理逻辑'], mistake: '过度推断或偷换概念' },
 ];
 
 const buildGeneralFallbackQuestion = (bp: QuestionBlueprint, card: KnowledgeCard | undefined, idx: number): QuizQuestion => {

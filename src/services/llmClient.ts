@@ -1,5 +1,7 @@
 ﻿import type { AIProvider, AIStatus } from '../types';
 
+import type { MaterialProfile } from './materialTopicService';
+
 export interface RuntimeAIConfig {
   provider: AIProvider;
   apiKey: string;
@@ -445,38 +447,100 @@ const callOpenAICompatible = async (config: RuntimeAIConfig, systemPrompt: strin
   }
 };
 
-export const callLLMJson = async (
-  systemPrompt: string,
-  userPrompt: string,
-  options?: { temperature?: number; max_tokens?: number }
-): Promise<unknown | null> => {
-  const config = getEffectiveAIConfig();
+export type ExternalAITaskType =
+  | 'question_generation'
+  | 'mistake_analysis'
+  | 'reinforcement_generation'
+  | 'report_generation'
+  | 'unknown';
+
+export const callExternalAIWithConfig = async ({
+  taskType,
+  prompt,
+  modelConfig,
+  materialProfile,
+  webReferenceContext,
+  options,
+}: {
+  taskType: ExternalAITaskType;
+  prompt: { systemPrompt: string; userPrompt: string } | string;
+  modelConfig?: RuntimeAIConfig;
+  materialProfile?: MaterialProfile | null;
+  webReferenceContext?: string;
+  options?: { temperature?: number; max_tokens?: number };
+}): Promise<unknown | null> => {
+  const config = modelConfig || getEffectiveAIConfig();
+  const providedPrompt = typeof prompt === 'string'
+    ? { systemPrompt: '', userPrompt: prompt }
+    : prompt;
+  const userPrompt = [
+    providedPrompt.userPrompt,
+    webReferenceContext
+      ? `\n\n【联网增强参考资料】\n${webReferenceContext}\n\n参考联网资料的题型风格，但必须围绕上传资料原创生成，不能照搬原题。`
+      : '',
+    materialProfile
+      ? `\n\n【当前资料主题】${materialProfile.stage}${materialProfile.subject}｜${materialProfile.chapter || ''}｜${materialProfile.topic}｜核心知识点：${materialProfile.coreConcepts.join('、')}`
+      : '',
+  ].join('');
+  const promptLength = providedPrompt.systemPrompt.length + userPrompt.length;
+
+  console.log('[REAL_AI_ENABLED]', config.provider !== 'mock' && Boolean(config.apiKey));
+  console.log('[AI_PROVIDER]', config.provider);
+  console.log('[AI_BASE_URL]', config.baseUrl || '');
+  console.log('[AI_MODEL]', config.model || '');
+  console.log('[AI_REQUEST_START]', new Date().toISOString());
+  console.log('[AI_PROMPT_LENGTH]', promptLength);
+
   if (config.provider === 'mock') {
     runtimeStatus = { provider: 'mock', modeLabel: providerLabels.mock, isRealAI: false };
+    console.log('[AI_USED_FALLBACK]', true, '原因: 外接 AI 未配置');
     return null;
   }
   if (!config.apiKey) {
     runtimeStatus = { provider: 'mock', modeLabel: 'API 未配置，已回退 Mock', isRealAI: false };
+    console.log('[AI_USED_FALLBACK]', true, '原因: 外接 AI API Key 未配置');
     return null;
   }
 
+  const start = Date.now();
   try {
-    // 自定义模型和第三方API使用 OpenAI 兼容格式（/chat/completions）
-    // 只有真正的OpenAI官方API才使用/responses端点
     const isOfficialOpenAI = config.provider === 'openai' && config.baseUrl.includes('api.openai.com');
     const temperature = options?.temperature ?? 0.2;
     const result = isOfficialOpenAI
-      ? await callOpenAI(config, systemPrompt, userPrompt, temperature)
-      : await callOpenAICompatible(config, systemPrompt, userPrompt, temperature);
+      ? await callOpenAI(config, providedPrompt.systemPrompt, userPrompt, temperature)
+      : await callOpenAICompatible(config, providedPrompt.systemPrompt, userPrompt, temperature);
     runtimeStatus = {
       provider: config.provider,
       modeLabel: config.label || providerLabels[config.provider],
       isRealAI: true,
     };
+    console.log('[AI_RAW_RESPONSE_LENGTH]', JSON.stringify(result).length);
+    console.log('[AI_GENERATION_TIME]', Date.now() - start, 'ms');
+    console.log('[AI_USED_FALLBACK]', false);
+    console.log('[AI_TASK_TYPE]', taskType);
     return result;
   } catch (error) {
-    console.error('[智学闭环] LLM 调用失败，已回退 Mock：', error);
-    runtimeStatus = { provider: 'mock', modeLabel: 'API 请求失败，已回退 Mock', isRealAI: false };
+    console.error('[智学闭环] 外接 AI 调用失败：', error);
+    runtimeStatus = {
+      provider: config.provider,
+      modeLabel: '外接 AI 失败，已切换本地兜底',
+      isRealAI: true,
+    };
+    console.log('[AI_RAW_RESPONSE_LENGTH]', 0);
+    console.log('[AI_GENERATION_TIME]', Date.now() - start, 'ms');
+    console.log('[AI_USED_FALLBACK]', true, `原因: ${error instanceof Error ? error.message : '外接 AI 请求失败'}`);
     return null;
   }
 };
+
+export const callLLMJson = async (
+  systemPrompt: string,
+  userPrompt: string,
+  options?: { temperature?: number; max_tokens?: number }
+): Promise<unknown | null> =>
+  callExternalAIWithConfig({
+    taskType: 'unknown',
+    prompt: { systemPrompt, userPrompt },
+    modelConfig: getEffectiveAIConfig(),
+    options,
+  });

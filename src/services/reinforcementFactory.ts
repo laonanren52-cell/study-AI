@@ -19,31 +19,31 @@ const VALID_PATTERNS: ExamQuestionPattern[] = [
 ];
 
 const isMathSubject = (subject: SubjectType): boolean =>
-  subject === '鏁板';
+  subject === '数学';
 
 const isChineseSubject = (subject: SubjectType): boolean =>
-  subject === '璇枃';
+  subject === '语文';
 
 const isEnglishSubject = (subject: SubjectType): boolean =>
-  subject === '鑻辫';
+  subject === '英语';
 
 const isPhysicsSubject = (subject: SubjectType): boolean =>
-  subject === '鐗╃悊';
+  subject === '物理';
 
 const isChemistrySubject = (subject: SubjectType): boolean =>
-  subject === '鍖栧';
+  subject === '化学';
 
 const isGeographySubject = (subject: SubjectType): boolean =>
-  subject === '鍦扮悊';
+  subject === '地理';
 
 const isBiologySubject = (subject: SubjectType): boolean =>
-  subject === '鐢熺墿';
+  subject === '生物';
 
 const isHistorySubject = (subject: SubjectType): boolean =>
-  subject === '鍘嗗彶';
+  subject === '历史';
 
 const isPoliticsSubject = (subject: SubjectType): boolean =>
-  subject === '鏀挎不';
+  subject === '政治';
 
 const ensureString = (val: string | undefined, fallback: string): string =>
   val || fallback;
@@ -76,27 +76,9 @@ export const generateFallbackReinforcementQuestions = (
       q.knowledgePointId === wp.id || q.knowledgePointId.includes(wp.id)
     );
 
-    if (isMathSubject(subject)) {
-      return buildMathReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isChineseSubject(subject)) {
-      return buildChineseReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isEnglishSubject(subject)) {
-      return buildEnglishReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isPhysicsSubject(subject)) {
-      return buildPhysicsReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isChemistrySubject(subject)) {
-      return buildChemistryReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isGeographySubject(subject)) {
-      return buildGeographyReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isBiologySubject(subject)) {
-      return buildBiologyReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isHistorySubject(subject)) {
-      return buildHistoryReinforcement(wp, relatedWrong, i + rotation, random);
-    } else if (isPoliticsSubject(subject)) {
-      return buildPoliticsReinforcement(wp, relatedWrong, i + rotation, random);
-    }
+    const rawQuestion = buildCleanReinforcement(wp, relatedWrong, subject, i + rotation);
 
-    return buildGeneralReinforcement(wp, relatedWrong, i, random);
+    return repairReinforcementQuestion(rawQuestion, wp, relatedWrong, subject, materialProfile, i);
   });
   const unique = deduplicateQuestions(generated);
   return unique.filter((question) => {
@@ -109,9 +91,171 @@ export const generateFallbackReinforcementQuestions = (
       knowledgePointId: question.sourceQuestionId || question.knowledgePointTitle,
       templateId: materialProfile.allowedTemplateIds[0],
     } as QuizQuestion, materialProfile);
-    if (!review.passed) console.warn('[寮哄寲棰樻牎楠宂 宸蹭涪寮冧笉绗﹀悎璧勬枡涓婚鐨勯鐩', review.problems);
+    if (!review.passed) console.warn('[强化题校验] 已丢弃不符合资料主题的题目', review.problems);
     return review.passed;
   });
+};
+
+const looksGarbled = (value: unknown): boolean =>
+  /�|鍙|鐨|绗|鏁|璇|鑻|鐗|鍖|鍦|寮|涔|紝|锛|宸|糮|宐/.test(String(value ?? ''));
+
+const isAbstractPracticeStem = (value: string): boolean =>
+  /阅读资料依据|完成具体判断|写出关键条件|请说明.{0,30}判断依据|指出一个易错点|请结合资料分析/.test(value);
+
+const cleanSource = (
+  wp: KnowledgePoint,
+  relatedWrong: QuizQuestion | undefined,
+  materialProfile?: MaterialProfile
+): string => {
+  const raw = wp.sourceEvidence || relatedWrong?.sourceEvidence || materialProfile?.sourceSummary || wp.description || wp.title;
+  return String(raw).replace(/\s+/g, ' ').trim().slice(0, 120);
+};
+
+const buildConcreteReinforcementAnswer = (
+  wp: KnowledgePoint,
+  relatedWrong: QuizQuestion | undefined,
+  source: string,
+  subject?: SubjectType,
+  index = 0
+): string => {
+  if (subject === '化学') {
+    return index % 2 === 0
+      ? '参考答案：NaCl 固体和熔融 KNO3 属于电解质；酒精和蔗糖属于非电解质；稀盐酸是混合物，不属于电解质或非电解质。依据：电解质和非电解质都必须是化合物，且电解质在水溶液或熔融状态下能导电。'
+      : '参考答案：有气泡产生的是稀盐酸与碳酸钠反应，生成二氧化碳；无明显现象的不能据此判断为不反应，还要结合离子是否能生成沉淀、气体或水。';
+  }
+  if (subject === '地理') {
+    return '参考答案：应判断该区域的具体自然条件和人文条件，例如气温、降水、河流、交通和市场；结论必须对应题干给出的区域信息，不能泛泛写“自然和人文条件”。';
+  }
+  if (relatedWrong?.type === 'single' && relatedWrong.answer) {
+    return `参考答案：${relatedWrong.answer}。理由：本题仍围绕“${wp.title}”，关键依据是“${source}”，需要先提取条件再判断选项。`;
+  }
+  return `参考答案：${wp.title}的结论应与题干条件一致。依据“${source}”，需要写出对应对象、条件变化和最终结论，不能只写方法。`;
+};
+
+const buildConcreteReinforcementStem = (
+  wp: KnowledgePoint,
+  subject: SubjectType,
+  index: number
+): string => {
+  if (subject === '化学') {
+    const chemistry = [
+      `在下列物质中：NaCl 固体、酒精、稀盐酸、熔融 KNO3、蔗糖溶液。属于电解质的是哪些？属于非电解质的是哪些？说明判断依据。`,
+      `向两支试管中分别加入稀盐酸和稀硫酸，再分别滴入碳酸钠溶液。观察到有气泡产生。请写出产生气泡的原因，并说明该现象对应的离子反应条件。`,
+      `某同学判断“氯化钠溶液是电解质”。请判断该说法是否正确，并说明 NaCl 固体、NaCl 溶液在概念归类上的区别。`,
+    ];
+    return `[变式训练 ${displayNumber(index)}] ${chemistry[index % chemistry.length]}`;
+  }
+  if (subject === '地理') {
+    const geo = [
+      `某地 1 月均温 4℃，7 月均温 28℃，年降水量 900mm 且夏季降水集中。判断该地最可能的气候类型，并说明两条依据。`,
+      `某城市位于河流交汇处，附近有铁路经过，周边平原面积较大。分析该城市早期形成的两个主要区位优势。`,
+    ];
+    return `[变式训练 ${displayNumber(index)}] ${geo[index % geo.length]}`;
+  }
+  if (subject === '数学') {
+    return `[变式训练 ${displayNumber(index)}] 已知 tanA = -5/12，且 A 是第四象限角，求 sinA 和 cosA，并写出符号判断依据。`;
+  }
+  if (subject === '物理') {
+    return `[变式训练 ${displayNumber(index)}] 一个 2kg 物体在水平面上受 10N 拉力，动摩擦因数为 0.2，g=10m/s²。求摩擦力和加速度。`;
+  }
+  return `[变式训练 ${displayNumber(index)}] 题干材料：“${wp.sourceEvidence || wp.description || wp.title}”。请根据这段具体材料回答与“${wp.title}”有关的设问，并写出明确结论。`;
+};
+
+const repairReinforcementQuestion = (
+  question: ReinforcementQuestion,
+  wp: KnowledgePoint,
+  relatedWrong: QuizQuestion | undefined,
+  subject: SubjectType,
+  materialProfile: MaterialProfile | undefined,
+  index: number
+): ReinforcementQuestion => {
+  const source = cleanSource(wp, relatedWrong, materialProfile);
+  const sourceText = source || `${subject}${wp.title}`;
+  const repairedQuestion = looksGarbled(question.question) || question.question.length < 20 || isAbstractPracticeStem(question.question)
+    ? buildConcreteReinforcementStem(wp, subject, index)
+    : question.question.includes(sourceText.slice(0, 12))
+      ? question.question
+      : `${question.question}（资料依据：“${sourceText}”）`;
+
+  const answerIsFake = !question.answer || question.answer.trim() === 'A' || looksGarbled(question.answer);
+  const steps = [
+    `定位资料依据：“${sourceText.slice(0, 70)}”`,
+    relatedWrong ? '对照原错题，找出条件或设问变化' : `明确“${wp.title}”的考查要求`,
+    `围绕“${wp.title}”完成推理并写出结论`,
+  ];
+  const rubric = [
+    `准确写出“${wp.title}”对应资料依据：3分`,
+    '分析过程具体，不使用空泛套话：3分',
+    '结论与题干条件一致：3分',
+    '表达清晰、术语规范：1分',
+  ];
+
+  return {
+    ...question,
+    subject,
+    question: repairedQuestion,
+    answer: answerIsFake || /应从|结合材料|写出判断依据|根据材料作答/.test(question.answer)
+      ? buildConcreteReinforcementAnswer(wp, relatedWrong, sourceText, subject, index)
+      : question.answer,
+    explanation: looksGarbled(question.explanation) || !question.explanation
+      ? `【解析】本题依据“${sourceText}”，考查“${wp.title}”。作答时先找材料条件，再判断条件如何支持结论，不能只写“结合材料分析”。`
+      : question.explanation,
+    hint: looksGarbled(question.hint) || !question.hint
+      ? `提示：先回到资料中找“${wp.title}”的条件，再写答案。`
+      : question.hint,
+    solutionSteps: question.solutionSteps?.length && !question.solutionSteps.some(looksGarbled) ? question.solutionSteps : steps,
+    scoringRubric: question.scoringRubric?.length && !question.scoringRubric.some(looksGarbled) ? question.scoringRubric : rubric,
+    commonMistake: looksGarbled(question.commonMistake) || !question.commonMistake
+      ? (wp.commonMistakes?.[0] || `没有结合资料中的具体条件理解“${wp.title}”。`)
+      : question.commonMistake,
+    sourceEvidence: sourceText,
+    knowledgePointTitle: wp.title,
+    sourceQuestionId: relatedWrong?.id || question.sourceQuestionId,
+  };
+};
+
+const buildCleanReinforcement = (
+  wp: KnowledgePoint,
+  relatedWrong: QuizQuestion | undefined,
+  subject: SubjectType,
+  index: number
+): ReinforcementQuestion => {
+  const question = buildConcreteReinforcementStem(wp, subject, index);
+  const source = cleanSource(wp, relatedWrong);
+  const answer = buildConcreteReinforcementAnswer(wp, relatedWrong, source, subject, index);
+  const sourceEvidence = source || wp.description || wp.title;
+  const subjectStep = subject === '化学'
+    ? '写出物质类别、反应现象或离子变化'
+    : subject === '数学'
+      ? '写出公式、代入和符号判断'
+      : subject === '地理'
+        ? '提取区域条件并形成因果判断'
+        : `提取与“${wp.title}”直接相关的题干条件`;
+  return {
+    id: `rq-fallback-${Date.now()}-${index}`,
+    subject,
+    knowledgePointTitle: wp.title,
+    examPattern: ensurePattern(wp.examPatterns?.[0]) || '变式迁移题',
+    question,
+    hint: `提示：先找题干中的具体对象或数据，再对应“${wp.title}”作答。`,
+    answer,
+    explanation: `【解析】本题考查“${wp.title}”。题干给出了具体对象和条件，作答时要先判断条件是否满足概念或规律，再写出结论。资料依据：${sourceEvidence}`,
+    solutionSteps: [
+      `识别题干对象：${question.slice(0, 45)}...`,
+      subjectStep,
+      `回扣“${wp.title}”写出明确结论`,
+    ],
+    scoringRubric: [
+      `准确识别“${wp.title}”：3分`,
+      '写出题干中的具体对象或数据：2分',
+      '推理过程与资料依据一致：3分',
+      '结论明确且表达规范：2分',
+    ],
+    commonMistake: wp.commonMistakes?.[0] || '只背概念名称，没有结合题干对象和条件判断。',
+    difficulty: index % 3 === 0 ? '简单' : index % 3 === 1 ? '中等' : '较难',
+    sourceQuestionId: relatedWrong?.id,
+    sourceEvidence,
+  };
 };
 
 // ========== 鏁板寮哄寲棰?==========
@@ -167,7 +311,7 @@ const buildMathReinforcement = (
     knowledgePointTitle: wp.title,
     examPattern: ensurePattern(wp.examPatterns?.[0]),
     question: `[变式训练 ${displayNumber(index)}] ${variant}，下列计算结果正确的是（  ）`,
-    answer: 'A',
+    answer: buildConcreteReinforcementAnswer(wp, relatedWrong, wp.sourceEvidence || wp.description || wp.title),
     explanation: `【解题思路】${wp.description?.slice(0, 100) || wp.title}。${wp.formulas?.[0] ? `【公式】${wp.formulas[0]}。` : ''}【关键步骤】${ensureString(wp.keyMethods?.[0], '按公式代入计算')}`,
     hint: `提示：注意ensureString(wp.keyMethods?.[0], '公式的适用条件')}，先判断再计算。`,
     solutionSteps: [
@@ -213,7 +357,7 @@ const buildChineseReinforcement = (
     knowledgePointTitle: wp.title,
     examPattern: ensurePattern(wp.examPatterns?.[0]),
     question,
-    answer: 'A',
+    answer: buildConcreteReinforcementAnswer(wp, relatedWrong, wp.sourceEvidence || wp.description || wp.title),
        explanation: `【解析】${wp.description?.slice(0, 100) || wp.title}。${wp.keyMethods?.[0] ? `【方法】${wp.keyMethods[0]}。` : ''}${wp.commonMistakes?.[0] ? `【常见错误】${wp.commonMistakes[0]}。` : ''}`,
     hint: '提示：仔细分析题意后作答。',
     solutionSteps: [
@@ -259,7 +403,7 @@ const buildEnglishReinforcement = (
     knowledgePointTitle: wp.title,
     examPattern: '鏉愭枡鍒嗘瀽棰 as ExamQuestionPattern',
     question: `${question}\n\nContext: ${material}`,
-    answer: 'A',
+    answer: buildConcreteReinforcementAnswer(wp, relatedWrong, wp.sourceEvidence || wp.description || wp.title),
     explanation: `【解析】${wp.description || wp.title}。${wp.keyMethods?.[0] ? `【方法】${wp.keyMethods[0]}。` : ''}${wp.commonMistakes?.[0] ? `【常见错误】${wp.commonMistakes[0]}。` : ''}`,
     hint: 'Hint: Consider both the literal meaning and the contextual implication.',
     solutionSteps: [
@@ -305,7 +449,7 @@ const buildPhysicsReinforcement = (
     knowledgePointTitle: wp.title,
     examPattern: '鏉′欢杈ㄦ瀽棰 as ExamQuestionPattern',
     question,
-    answer: 'A',
+    answer: buildConcreteReinforcementAnswer(wp, relatedWrong, wp.sourceEvidence || wp.description || wp.title),
       explanation: `【解析】${wp.description?.slice(0, 100) || wp.title}。${wp.keyMethods?.[0] ? `【方法】${wp.keyMethods[0]}。` : ''}${wp.commonMistakes?.[0] ? `【常见错误】${wp.commonMistakes[0]}。` : ''}`,
     hint: `鎻愮ず锛氭敞鎰{ensureString(wp.keyMethods.[0], '鐗╃悊鏉′欢')}锛屼笉瑕佸拷鐣ュ崟浣嶃€俙`,
     solutionSteps: [
@@ -350,7 +494,7 @@ const buildChemistryReinforcement = (
     knowledgePointTitle: wp.title,
     examPattern: '鏉′欢杈ㄦ瀽棰 as ExamQuestionPattern',
     question,
-    answer: 'A',
+    answer: buildConcreteReinforcementAnswer(wp, relatedWrong, wp.sourceEvidence || wp.description || wp.title),
       explanation: `【解析】${wp.description?.slice(0, 100) || wp.title}。${wp.keyMethods?.[0] ? `【方法】${wp.keyMethods[0]}。` : ''}${wp.commonMistakes?.[0] ? `【常见错误】${wp.commonMistakes[0]}。` : ''}`,
     hint: `鎻愮ず锛氭敞鎰{ensureString(wp.keyMethods.[0], '鍙嶅簲鏉′欢鍜岀墿璐ㄦ€ц川')}锛屼笉瑕佹璁扮‖鑳屻€俙`,
     solutionSteps: [
@@ -496,14 +640,14 @@ const buildGeneralReinforcement = (
   index: number,
   random: () => number
 ): ReinforcementQuestion => {
-  const question = `[变式训练 ${displayNumber(index)}] 关于"${wp.title}"，以下分析正确的是（  ）`;
+  const question = `[变式训练 ${displayNumber(index)}] 阅读资料中与"${wp.title}"相关的具体条件后，最符合材料依据的分析是（  ）`;
 
   return {
     id: `rq-fallback-${Date.now()}-${index}`,
     knowledgePointTitle: wp.title,
     examPattern: ensurePattern(wp.examPatterns?.[0]),
     question,
-    answer: 'A',
+    answer: buildConcreteReinforcementAnswer(wp, relatedWrong, wp.sourceEvidence || wp.description || wp.title),
       explanation: `【解析】${wp.description?.slice(0, 100) || wp.title}。${wp.keyMethods?.[0] ? `【方法】${wp.keyMethods[0]}。` : ''}${wp.commonMistakes?.[0] ? `【常见错误】${wp.commonMistakes[0]}。` : ''}`,
     hint: '提示：仔细分析题意后作答。',
     solutionSteps: [
@@ -527,7 +671,9 @@ const buildGeneralReinforcement = (
 // ========== 杈呭姪鍑芥暟 ==========
 
 const inferSubjectFromWrongQuestions = (wrongQuestions: QuizQuestion[]): SubjectType => {
-  if (wrongQuestions.length === 0) return '璇枃';
+  if (wrongQuestions.length === 0) return '语文';
+  const explicitSubject = wrongQuestions.find((question) => question.subject)?.subject;
+  if (explicitSubject) return explicitSubject;
 
   const patterns: string[] = wrongQuestions
     .map(q => q.examPattern)
@@ -536,22 +682,22 @@ const inferSubjectFromWrongQuestions = (wrongQuestions: QuizQuestion[]): Subject
   const matchAny = (arr: string[], targets: string[]) => targets.some(t => arr.includes(t));
 
   if (matchAny(patterns, ['公式套用题', '条件辨析题', '综合解答题'])) {
-    return '鏁板';
+    return '数学';
   }
   if (matchAny(patterns, ['材料分析题'])) {
     const hasEnglish = wrongQuestions.some(q =>
       (q.explanation || '').includes('passage') || (q.question || '').includes('Read the')
     );
-    return hasEnglish ? '鑻辫' : '璇枃';
+    return hasEnglish ? '英语' : '语文';
   }
   if (matchAny(patterns, ['受力分析题', '电路分析题'])) {
-    return '鐗╃悊';
+    return '物理';
   }
   if (matchAny(patterns, ['反应方程式', '物质推断题'])) {
-    return '鍖栧';
+    return '化学';
   }
 
-  return '璇枃';
+  return '语文';
 };
 
 const createSeededRandom = (seed: number): (() => number) => {

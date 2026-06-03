@@ -21,6 +21,7 @@ import {
   extractKnowledgePoints,
   generateDiagnosis,
   generateQuiz,
+  generateQuizWithMeta,
   generateReinforcementQuiz,
   generateReviewPlan,
   getAIStatus,
@@ -48,6 +49,8 @@ import type {
   UserAnswer,
 } from './types';
 import { sampleMaterial, sampleMaterialTitle } from './data/sampleMaterial';
+import { filterQuestionsByQualityGate } from './services/questionQualityGate';
+import { generateFallbackQuestionsFromBlueprints } from './services/fallbackQuestionFactory';
 
 const emptyMaterial: MaterialInputType = {
   title: '',
@@ -171,7 +174,7 @@ export default function App() {
         title: mp.title,
         description: mp.coreConcept,
         importance: (['高', '中', '低'] as const)[i % 3],
-        masteryTarget: mp.commonQuestionTypes[0] ? `掌握${mp.commonQuestionTypes[0]}的解题方法` : '理解并掌握该考点',
+        masteryTarget: mp.commonQuestionTypes[0] ? `掌握${mp.commonQuestionTypes[0]}的解题方法` : '能结合资料条件完成具体判断',
         examType: mp.commonQuestionTypes.join('、') || '选择题、判断题',
         sourceEvidence: content.slice(0, 100),
         keywords: mp.keywords || [],
@@ -189,7 +192,7 @@ export default function App() {
       title: s.trim().slice(0, 20) + (s.trim().length > 20 ? '...' : ''),
       description: s.trim(),
       importance: (['高', '中', '低'] as const)[i % 3],
-      masteryTarget: '理解并掌握该概念',
+      masteryTarget: '能结合资料条件完成具体判断',
       examType: '选择题、判断题',
       sourceEvidence: s.trim(),
       keywords: [],
@@ -289,7 +292,7 @@ export default function App() {
     });
 
     const handleGenerateQuiz = () =>
-    runWithLoading('AI 正在生成测评题目...', async () => {
+    runWithLoading('正在调用外接 AI 生成题目...', async () => {
       if (contentType === 'exam') {
         if (examQuestions.length > 0) {
           const filtered = examQuestions.map(q => ({ ...q, qualityScore: q.qualityScore ?? 90 }));
@@ -309,9 +312,15 @@ export default function App() {
       if (knowledgePoints.length > 0) {
         try {
           // 使用统一调度器：QuestionPlan → AI 出题 → fallback 补齐 → 主题校验 → 去重
-          const result = { questions: [], orchestratorResult: { generationNotice: "" } }; // SKIP AI
+          const result = await generateQuizWithMeta(knowledgePoints, material.content, quizSettings);
           generated = result.questions;
           orchestratorNotice = result.orchestratorResult.generationNotice;
+          if (result.orchestratorResult.aiGenerationTimeMs) {
+            orchestratorNotice = `外接 AI 生成完成，用时 ${(result.orchestratorResult.aiGenerationTimeMs / 1000).toFixed(1)} 秒。${orchestratorNotice ? `\n${orchestratorNotice}` : ''}`;
+          }
+          if (result.orchestratorResult.webContextUsedInPrompt) {
+            orchestratorNotice = `联网增强参考资料已进入 prompt。\n${orchestratorNotice}`;
+          }
           
           // AI 调用追踪日志
           const orch = result.orchestratorResult;
@@ -343,20 +352,25 @@ export default function App() {
           goToStep('quiz');
           return;
         }
-        const pseudoBlueprints = kpList.slice(0, quizSettings.questionCount ?? 5).map((kp, i) => ({
+        const targetCount = quizSettings.questionCount ?? 5;
+        const sourceKps = kpList.length > 0 ? kpList : mockExtractKnowledgePoints(material.content, subjectType);
+        const pseudoBlueprints = Array.from({ length: targetCount }, (_, i) => {
+          const kp = sourceKps[i % Math.max(sourceKps.length, 1)];
+          return {
           id: `kp-${i}`,
           templateId: fallbackTopic.allowedTemplateIds[i % Math.max(fallbackTopic.allowedTemplateIds.length, 1)],
-          knowledgeCardId: kp.id,
-          knowledgePoint: kp.title,
-          targetAbility: kp.masteryTarget || '理解并掌握',
-          requiredMethods: kp.keyMethods?.slice(0, 3) || ['理解核心概念'],
-          examPattern: (kp.examPatterns?.[0] || '基础概念题') as any,
+          knowledgeCardId: kp?.id || `kp-${i}`,
+          knowledgePoint: kp?.title || fallbackTopic.topicTag,
+          targetAbility: kp?.masteryTarget || `围绕"${kp?.title || fallbackTopic.topicTag}"完成具体条件判断`,
+          requiredMethods: kp?.keyMethods?.slice(0, 3) || ['定位资料依据', '分析具体条件'],
+          examPattern: (kp?.examPatterns?.[0] || '基础概念题') as any,
           difficulty: (['简单', '中等', '较难'] as const)[i % 3],
-          scoringPoints: [kp.description?.slice(0, 50) || '核心概念正确'],
-          commonWrongMethods: kp.commonMistakes?.slice(0, 3) || ['对该概念理解模糊'],
-          sourceEvidence: kp.sourceEvidence || kp.description || '',
+          scoringPoints: [kp?.sourceEvidence || kp?.description || `能结合资料说明${kp?.title || fallbackTopic.topicTag}`],
+          commonWrongMethods: kp?.commonMistakes?.slice(0, 3) || ['对该概念理解模糊'],
+          sourceEvidence: kp?.sourceEvidence || kp?.description || material.content.slice(0, 120),
           estimatedTime: 3,
-        }));
+          };
+        });
         generated = generateFallbackQuestionsFromBlueprints(pseudoBlueprints, [], quizSettings, fallbackTopic);
         orchestratorNotice = orchestratorNotice || '未能连接外部 AI，已使用本地题库生成。';
       }
@@ -369,9 +383,16 @@ export default function App() {
       }
 
       const allQuestions = generated.map(q => ({ ...q, qualityScore: q.qualityScore ?? 90 }));
+      const displayQuestions = currentMaterialProfile
+        ? filterQuestionsByQualityGate(allQuestions, currentMaterialProfile)
+        : allQuestions;
       
-      setGenerationNotice(orchestratorNotice);
-      setQuestions(allQuestions);
+      setGenerationNotice(
+        displayQuestions.length < quizSettings.questionCount
+          ? `仅生成 ${displayQuestions.length} 道高质量题，其余候选题因题干空泛、解析不足或与资料不匹配已被拦截。`
+          : orchestratorNotice
+      );
+      setQuestions(displayQuestions);
       setAnswers([]);
       setAiStatus(getAIStatus());
       goToStep('quiz');
@@ -385,7 +406,7 @@ export default function App() {
     });
 
   const handleDiagnosis = () =>
-    runWithLoading('AI 正在生成错因诊断...', async () => {
+    runWithLoading('正在调用外接 AI 生成错因诊断...', async () => {
       if (!result) return;
       let generated: DiagnosisItem[] = [];
       const isRealAI = hasRealAIConfig();
@@ -409,7 +430,7 @@ export default function App() {
     });
 
   const handleReviewPlan = () =>
-    runWithLoading('AI 正在规划复习路径...', async () => {
+    runWithLoading('正在调用外接 AI 规划复习路径...', async () => {
       if (!result) return;
       let generated: ReviewPlanDay[] = [];
       const isRealAI = hasRealAIConfig();
@@ -431,7 +452,7 @@ export default function App() {
     });
 
   const handleReinforcement = () =>
-    runWithLoading('AI 正在生成强化练习...', async () => {
+    runWithLoading('正在调用外接 AI 生成强化训练...', async () => {
       if (!result) return;
       let generated: ReinforcementQuestion[] = [];
       setReinforcementError('');
@@ -479,7 +500,7 @@ export default function App() {
     });
 
   const handleRefreshReinforcement = () =>
-    runWithLoading('AI 正在刷新同类变式...', async () => {
+    runWithLoading('正在调用外接 AI 刷新同类变式...', async () => {
       if (!result) return;
       let generated: ReinforcementQuestion[] = [];
       setReinforcementError('');
@@ -607,11 +628,11 @@ export default function App() {
       const pseudoBlueprints = points.slice(0, quizSettings.questionCount ?? 5).map((kp, i) => ({
         id: `bp-kp-${kp.id}`, knowledgeCardId: kp.id, knowledgePoint: kp.title,
         templateId: fallbackTopic.allowedTemplateIds[i % Math.max(fallbackTopic.allowedTemplateIds.length, 1)],
-        targetAbility: kp.masteryTarget || `理解并掌握"${kp.title}"`,
-        requiredMethods: kp.keyMethods?.slice(0, 3) || ['理解核心概念'],
+        targetAbility: kp.masteryTarget || `围绕"${kp.title}"完成具体条件判断`,
+        requiredMethods: kp.keyMethods?.slice(0, 3) || ['定位资料依据', '分析具体条件'],
         examPattern: (kp.examPatterns?.[0] || '基础概念题') as any,
         difficulty: (['简单', '中等', '较难'] as const)[i % 3],
-        scoringPoints: [kp.description?.slice(0, 50) || '核心概念正确'],
+        scoringPoints: [kp.sourceEvidence || kp.description || `能结合资料说明${kp.title}`],
         commonWrongMethods: kp.commonMistakes?.slice(0, 3) || ['对该概念理解模糊'],
         sourceEvidence: kp.sourceEvidence || kp.description || '', estimatedTime: 3,
       }));
@@ -619,7 +640,13 @@ export default function App() {
     }
     if (generated.length === 0) setGenerationNotice('示例资料未能生成有效题目，请返回资料页重新尝试。');
     const allQ = generated.map(q => ({ ...q, qualityScore: q.qualityScore ?? 90 }));
-    const filtered = allQ.filter(q => q.qualityScore >= 80);
+    const sampleProfile = inferMaterialProfile(sampleContent, points, quizSettings.subjectType as string);
+    const filtered = sampleProfile
+      ? filterQuestionsByQualityGate(allQ, sampleProfile).filter(q => q.qualityScore >= 80)
+      : allQ.filter(q => q.qualityScore >= 80);
+    if (filtered.length < quizSettings.questionCount) {
+      setGenerationNotice(`仅生成 ${filtered.length} 道高质量题，其余候选题因题干空泛、解析不足或与资料不匹配已被拦截。`);
+    }
     setQuestions(filtered);
     setAnswers([]);
     setAiStatus(getAIStatus());
@@ -736,7 +763,15 @@ export default function App() {
         <ResultSummary result={result} questions={questions} knowledgePoints={knowledgePoints} onDiagnosis={handleDiagnosis} />
       ) : null}
       {step === 'diagnosis' ? <DiagnosisPanel diagnosis={diagnosis} onGeneratePlan={handleReviewPlan} onGenerateVariants={handleGenerateVariants} variantQuestions={variantQuestions} activeVariantQuestionId={activeVariantQuestionId} /> : null}
-      {step === 'plan' ? <ReviewPlan reviewPlan={reviewPlan} onGenerateReinforcement={handleReinforcement} /> : null}
+      {step === 'plan' ? (
+        <ReviewPlan
+          reviewPlan={reviewPlan}
+          onGenerateReinforcement={handleReinforcement}
+          materialProfile={materialProfile}
+          wrongQuestions={result?.wrongQuestions || []}
+          weakKnowledgePoints={result?.weakKnowledgePoints || []}
+        />
+      ) : null}
       {step === 'reinforcement' ? (
         <ReinforcementQuiz
           reinforcementQuiz={reinforcementQuiz}
@@ -754,6 +789,7 @@ export default function App() {
           diagnosis={diagnosis}
           reviewPlan={reviewPlan}
           reinforcementQuiz={reinforcementQuiz}
+          questions={questions}
           materialProfile={materialProfile}
         />
       ) : null}

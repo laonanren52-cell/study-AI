@@ -36,7 +36,7 @@ export function extractExamPatternsFromSources(
              knowledgeCard.subject === '语文' ? '初高中' : '高中',
       examType: '高考',
       patternStructure: source.summary || '',
-      testedAbility: `理解并掌握${knowledgeCard.title}的核心概念和常见题型`,
+      testedAbility: `能结合具体条件运用${knowledgeCard.title}完成判断和解答`,
       commonMistakes: knowledgeCard.commonMistakes.length > 0
         ? knowledgeCard.commonMistakes
         : ['忽略关键条件', '概念混淆', '应用场景判断错误'],

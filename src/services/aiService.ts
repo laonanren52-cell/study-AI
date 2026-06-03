@@ -18,10 +18,11 @@ import { evaluateQuizAnswers } from '../utils/scoring';
 import { getExamStrategy, inferSubjectType, mapToDisplaySubject } from './examStrategy';
 import { resolveActualSubject } from './subjectConfig';
 import { isLikelyXmlGarbage, cleanExtractedText as deepCleanText } from '../utils/textCleaner';
-import { callLLMJson, getAIStatus } from './llmClient';
+import { callExternalAIWithConfig, callLLMJson, getAIStatus, getEffectiveAIConfig } from './llmClient';
 import { inferMaterialProfile, inferMaterialTopic, isSpecificTopic, materialProfileToTopic } from './materialTopicService';
 import type { MaterialProfile } from './materialTopicService';
 import { deduplicateQuestions, normalizedStemHash, verifyQuestionAgainstProfile, verifyQuestionTopicAlignment } from './questionTopicVerifier';
+import { filterQuestionsByQualityGate, validateQuestionQuality } from './questionQualityGate';
 import { buildDiagnosisPrompt, buildKnowledgePrompt, buildQuizPrompt } from './promptTemplates';
 import { generateKnowledgeCards, generateQuestionBlueprints, validateBlueprint } from './questionBlueprintService';
 import { reviewQuestionQuality, reviewQuestionsQuality } from './questionQualityService';
@@ -313,11 +314,14 @@ function applyFinalQualityGate(
     const topic = materialProfile
       ? verifyQuestionAgainstProfile(q, materialProfile)
       : materialTopic ? verifyQuestionTopicAlignment(q, materialTopic) : { passed: true, problems: [], score: 100 };
+    const qualityGate = materialProfile
+      ? validateQuestionQuality(q, materialProfile)
+      : { passed: true, reason: '通过' };
     return {
       ...q,
       qualityScore: review.score,
       qualityReview: review,
-      isLowQuality: !review.passed || !accuracy.passed || !topic.passed,
+      isLowQuality: !review.passed || !accuracy.passed || !topic.passed || !qualityGate.passed,
     };
   };
 
@@ -327,11 +331,15 @@ function applyFinalQualityGate(
     const topic = materialProfile
       ? verifyQuestionAgainstProfile(q, materialProfile)
       : materialTopic ? verifyQuestionTopicAlignment(q, materialTopic) : { passed: true, problems: [], score: 100 };
-    if (!review.passed || review.score < 80 || !accuracy.passed || !topic.passed) {
+    const qualityGate = materialProfile
+      ? validateQuestionQuality(q, materialProfile)
+      : { passed: true, reason: '通过' };
+    if (!review.passed || review.score < 80 || !accuracy.passed || !topic.passed || !qualityGate.passed) {
       console.warn(`[质量门禁] 题目 ${q.id} 未通过最终审核`, {
         quality: review.problems,
         accuracy: accuracy.problems,
         topic: topic.problems,
+        qualityGate: qualityGate.reason,
       });
       return false;
     }
@@ -362,7 +370,9 @@ function applyFinalQualityGate(
     const fallbackBps = blueprints.slice(0, Math.min(needed * 2, blueprints.length));
     const fallbackQs = generateFallbackQuestionsFromBlueprints(fallbackBps, knowledgeCards, settings, materialTopic);
 
-    const qualityFiltered = fallbackQs.map(reviewQuestion).filter(passesGate);
+    const qualityFiltered = materialProfile
+      ? filterQuestionsByQualityGate(fallbackQs.map(reviewQuestion), materialProfile, finalQuestions).filter(passesGate)
+      : fallbackQs.map(reviewQuestion).filter(passesGate);
 
     finalQuestions = [...finalQuestions, ...qualityFiltered].slice(0, targetCount);
   }
@@ -449,7 +459,7 @@ export const generateQuizWithMeta = async (
   const orchestratorResult = await generateQuestionsByConfig({
     materialProfile,
     materialTopic,
-    sourceText: cleanExtractedText(materialText),
+    sourceText: deepCleanText(materialText),
     knowledgePoints,
     settings: effectiveSettings,
   });
@@ -488,7 +498,19 @@ export const generateDiagnosis = async (
   answers: UserAnswer[]
 ): Promise<DiagnosisItem[]> => {
   const prompt = buildDiagnosisPrompt(result, questions, answers);
-  const llmResult = await callLLMJson(prompt.systemPrompt, prompt.userPrompt);
+  const llmResult = await callExternalAIWithConfig({
+    taskType: 'mistake_analysis',
+    prompt: {
+      systemPrompt: prompt.systemPrompt,
+      userPrompt: `${prompt.userPrompt}
+
+补充要求：
+- 每道错题必须写清：错因类型、学生错在哪里、正确判断方法、对应知识点、下次练什么题。
+- 禁止只写“概念理解错误”“审题不清”这类空话。
+- 必须引用题干条件、学生答案和标准答案。`,
+    },
+    modelConfig: getEffectiveAIConfig(),
+  });
 
   if (llmResult && Array.isArray((llmResult as Record<string, unknown>).diagnosis)) {
     const diagnosis = ((llmResult as Record<string, unknown>).diagnosis as unknown[])
@@ -589,6 +611,30 @@ export const generateReviewPlan = async (
   }
   const focus = validWeakPoints.map((item) => item.title);
 
+  const aiPlan = await callExternalAIWithConfig({
+    taskType: 'report_generation',
+    prompt: {
+      systemPrompt: '你是初高中家教老师的课后复习规划助手，只输出 JSON。',
+      userPrompt: `请为当前学生生成具体复习计划，必须包含 1天后、3天后、7天后、15天后 四个节点。
+每个节点必须绑定当前薄弱知识点，写清复习任务、练习数量、方法、常见误区和自查标准。
+禁止只写“1天后/3天后/7天后”这种空安排。
+输出格式：{"plan":[{"day":1,"goal":"","focusKnowledgePoints":[],"duration":"","practiceCount":3,"method":"","mustRemember":[],"exampleTasks":[],"reinforcementTasks":[],"commonMistakes":[],"selfCheckCriteria":[],"checklist":[{"id":"d1-1","text":"","done":false}]}]}
+
+薄弱知识点：
+${JSON.stringify(validWeakPoints, null, 2)}
+
+错因诊断：
+${JSON.stringify(diagnosis, null, 2)}`,
+    },
+    modelConfig: getEffectiveAIConfig(),
+  });
+  const parsedPlan = Array.isArray((aiPlan as Record<string, unknown> | null)?.plan)
+    ? ((aiPlan as Record<string, unknown>).plan as ReviewPlanDay[])
+    : [];
+  if (parsedPlan.length >= 4 && parsedPlan.every((item) => item.goal && item.focusKnowledgePoints?.length)) {
+    return parsedPlan.slice(0, 4);
+  }
+
   const subjectType = resolveSafeSubject(weakKnowledgePoints[0]?.subjectType);
   const strategy = getExamStrategy(subjectType);
   const formulas = [...new Set(weakKnowledgePoints.flatMap((item) => item.formulas ?? []))];
@@ -662,7 +708,7 @@ export const generateReviewPlan = async (
       ],
     },
     {
-      day: 2,
+      day: 3,
       goal: isMath
         ? '强化条件辨析和变式迁移，减少因条件变化导致的失分。'
         : '强化材料中的应用场景、语境条件和易错辨析。',
@@ -700,21 +746,21 @@ export const generateReviewPlan = async (
         ? ['能主动检查符号、范围、单位或定义域。', '能独立写出至少 3 个得分点。']
         : ['能区分规则本身和语境条件。', '能完整写出判断理由。'],
       checklist: [
-        { id: 'd2-1', text: '完成至少 6 道同类变式题', done: false },
-        { id: 'd2-2', text: '标注每道题的条件变化', done: false },
-        { id: 'd2-3', text: '整理错因和缺失得分点', done: false },
+        { id: 'd3-1', text: `做变式训练，重点区分 ${focus[0] || '薄弱知识点'} 和 ${focus[1] || '易混条件'}`, done: false },
+        { id: 'd3-2', text: '标注每道题的条件变化', done: false },
+        { id: 'd3-3', text: '整理错因和缺失得分点', done: false },
       ],
     },
     {
-      day: 3,
-      goal: '复盘错题并完成二次强化测试。',
+      day: 7,
+      goal: `做综合小测，检查 ${focus.slice(0, 3).join('、') || '本次薄弱知识点'}。`,
       focusKnowledgePoints:
         diagnosis.length > 0
           ? [...new Set(diagnosis.map((item) => item.knowledgePointTitle))]
           : focus,
-      duration: '30 分钟',
-      practiceCount: 5,
-      method: '先遮住解析重答错题，再完成系统生成的同类变式，最后按得分点自评。',
+      duration: '40 分钟',
+      practiceCount: 8,
+      method: '先遮住解析重答错题，再完成一组综合小测，最后按得分点自评。',
       mustRemember:
         formulas.length > 0
           ? formulas
@@ -736,9 +782,38 @@ export const generateReviewPlan = async (
         '能对照得分点找出缺失项。',
       ],
       checklist: [
-        { id: 'd3-1', text: '遮住答案重做错题', done: false },
-        { id: 'd3-2', text: '完成二次强化题', done: false },
-        { id: 'd3-3', text: '按得分点自评并记录仍需复习项', done: false },
+        { id: 'd7-1', text: '遮住答案重做错题', done: false },
+        { id: 'd7-2', text: `完成覆盖 ${focus.slice(0, 3).join('、') || '薄弱点'} 的综合小测`, done: false },
+        { id: 'd7-3', text: '按得分点自评并记录仍需复习项', done: false },
+      ],
+    },
+    {
+      day: 15,
+      goal: `完成一次 10 题复测，形成家长反馈，重点确认 ${focus.slice(0, 4).join('、') || '薄弱知识点'} 是否稳定掌握。`,
+      focusKnowledgePoints: focus.slice(0, 4),
+      duration: '45 分钟',
+      practiceCount: 10,
+      method: '按正式小测完成 10 题复测，统计正确率、错因类型和仍需家长配合的复习任务。',
+      mustRemember: formulas.length > 0 ? formulas : [`${focus[0]}的定义和适用条件`, `${focus[1] || focus[0]}的易混边界`],
+      exampleTasks: [
+        `复测前重看 ${focus[0] || '核心薄弱点'} 的错题订正。`,
+        `复测后把 ${focus.slice(0, 3).join('、') || '薄弱点'} 的失分题写入家长反馈。`,
+      ],
+      reinforcementTasks: [
+        '完成 10 题复测，不看答案独立完成。',
+        '把错题按“概念、条件、步骤、表达”分类。',
+        '给家长反馈 1 条已掌握内容和 1 条仍需跟进内容。',
+      ],
+      commonMistakes: mistakes,
+      selfCheckCriteria: [
+        '10 题复测正确率达到 80% 以上。',
+        '能说出每道错题的具体错因。',
+        '能独立完成同知识点变式题。',
+      ],
+      checklist: [
+        { id: 'd15-1', text: '完成 10 题复测', done: false },
+        { id: 'd15-2', text: '整理错因分类', done: false },
+        { id: 'd15-3', text: '形成家长反馈要点', done: false },
       ],
     },
   ];
@@ -808,6 +883,67 @@ ${materialText.slice(0, 3000)}`;
 };
 
 // ========== 强化题生成（优先 LLM，失败用 fallback） ==========
+const normalizeReinforcementOutput = (
+  raw: Partial<ReinforcementQuestion> & { scoringPoints?: string[] },
+  kp: KnowledgePoint,
+  subject: SubjectType | undefined,
+  index: number,
+  materialProfile?: MaterialProfile,
+  relatedWrong?: QuizQuestion
+): ReinforcementQuestion => {
+  const sourceEvidence = String(raw.sourceEvidence || kp.sourceEvidence || relatedWrong?.sourceEvidence || materialProfile?.sourceSummary || kp.description || kp.title)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140);
+  const answer = String(raw.answer || '').trim();
+  const answerLooksFake = !answer || answer === 'A' || /�|鍙|鐨|绗|鏁|璇|鑻|鐗|鍖|鍦|寮|涔|紝|锛/.test(answer);
+  const steps = Array.isArray(raw.solutionSteps) && raw.solutionSteps.length > 0
+    ? raw.solutionSteps.map(String)
+    : [
+        `定位资料依据：“${sourceEvidence.slice(0, 70)}”`,
+        `围绕“${kp.title}”分析条件变化`,
+        '写出具体结论并回扣题干',
+      ];
+  const scoringRubric = Array.isArray(raw.scoringRubric) && raw.scoringRubric.length > 0
+    ? raw.scoringRubric.map(String)
+    : Array.isArray(raw.scoringPoints) && raw.scoringPoints.length > 0
+      ? raw.scoringPoints.map(String)
+      : [
+          `准确定位“${kp.title}”：3分`,
+          '分析过程具体：3分',
+          '结论与资料一致：3分',
+          '表达规范：1分',
+        ];
+
+  const rawQuestion = String(raw.question || '').trim();
+  const abstractStem = /阅读资料依据|完成具体判断|写出关键条件|请说明.{0,30}判断依据|指出一个易错点|请结合资料分析/.test(rawQuestion);
+  const concreteQuestion = materialProfile?.subject === '化学'
+    ? '在下列物质中：NaCl 固体、酒精、稀盐酸、熔融 KNO3、蔗糖溶液。属于电解质的是哪些？属于非电解质的是哪些？说明判断依据。'
+    : rawQuestion || `已知材料条件“${sourceEvidence}”，请完成与“${kp.title}”相关的具体题目。`;
+
+  return {
+    id: raw.id || `rq-llm-${Date.now()}-${index}`,
+    subject,
+    normalizedStemHash: normalizedStemHash(raw.question || ''),
+    knowledgePointTitle: kp.title,
+    examPattern: (raw.examPattern || '变式迁移题') as ExamQuestionPattern,
+    question: abstractStem ? concreteQuestion : concreteQuestion,
+    hint: String(raw.hint || `提示：先找资料中“${kp.title}”的直接依据。`),
+    answer: answerLooksFake
+      ? materialProfile?.subject === '化学'
+        ? '参考答案：NaCl 固体和熔融 KNO3 属于电解质；酒精和蔗糖属于非电解质；稀盐酸是混合物，不属于电解质或非电解质。原因是电解质和非电解质都必须是化合物。'
+        : `参考答案：${kp.title}的具体结论必须对应题干对象和条件；依据“${sourceEvidence}”写出对象、条件变化和最终结论。`
+      : answer,
+    explanation: String(raw.explanation || `【解析】本题基于资料依据“${sourceEvidence}”，考查“${kp.title}”。作答时要先定位条件，再说明条件如何支持结论。`),
+    solutionSteps: steps,
+    scoringRubric,
+    commonMistake: String(raw.commonMistake || kp.commonMistakes?.[0] || `脱离资料条件套用“${kp.title}”概念。`),
+    sourceQuestionId: relatedWrong?.id || raw.sourceQuestionId,
+    sourceEvidence,
+    difficulty: (raw.difficulty || (index < 2 ? '中等' : '较难')) as Difficulty,
+  };
+};
+
 export const generateReinforcementQuiz = async (
   weakKnowledgePoints: KnowledgePoint[],
   questions: QuizQuestion[] = [],
@@ -850,31 +986,54 @@ export const generateReinforcementQuiz = async (
       sourceEvidence: kp.sourceEvidence || kp.description,
     }));
 
-    const llmResult = await callLLMJson(
-      `${basePrompt} 每个知识点生成 1 道变式题，包含题干、选项、答案、解析、提示、得分点。输出 JSON 格式：{"questions": [...]}`,
-      JSON.stringify({ knowledgePoints: questionList, seed: variantSeed }, null, 2)
-    );
+    const llmResult = await callExternalAIWithConfig({
+      taskType: 'reinforcement_generation',
+      prompt: {
+        systemPrompt: `${basePrompt}
+必须严格围绕上传资料和错题生成，不能跨学科。
+每道题必须有具体题干、具体标准答案、详细解析、独立标准步骤、独立得分点、常见误区、资料依据 sourceEvidence。
+主观题 answer 不能写 A/B/C/D，必须是具体文字答案。得分点必须是正常中文。
+禁止生成“阅读资料依据、写出关键条件、请说明判断依据、指出一个易错点、请结合资料分析”这类抽象题。
+如果是化学题，必须包含具体物质、具体反应或实验现象、明确问题、明确标准答案。
+输出 JSON 格式：{"questions": [...]}`,
+        userPrompt: JSON.stringify({
+        materialProfile,
+        weakKnowledgePoints: questionList,
+        wrongQuestions: wrongQuestions.map((q) => ({
+          id: q.id,
+          type: q.type,
+          question: q.question,
+          answer: q.answer,
+          knowledgePointId: q.knowledgePointId,
+          sourceEvidence: q.sourceEvidence,
+        })),
+        seed: variantSeed,
+      }, null, 2),
+      },
+      modelConfig: getEffectiveAIConfig(),
+      materialProfile,
+    });
 
     if (llmResult && Array.isArray((llmResult as Record<string, unknown>).questions)) {
       const llmQuestions = (llmResult as Record<string, unknown>).questions as ReinforcementQuestion[];
       if (llmQuestions.length > 0) {
         const previousHashes = new Set(previousQuestions.map((question) => normalizedStemHash(question.question)));
-        const verifiedQuestions = deduplicateQuestions(llmQuestions.map((q, i) => ({
-          ...q,
-          id: q.id || `rq-llm-${Date.now()}-${i}`,
-          subject: materialProfile?.subject,
-          normalizedStemHash: normalizedStemHash(q.question),
-          knowledgePointId: weak[i % weak.length]?.id || '',
-          knowledgePointTitle: weak[i % weak.length]?.title || '',
-          sourceWrongQuestionId: wrongQuestions[i]?.id,
-          difficulty: (i < 2 ? '中等' : '较难') as Difficulty,
-        })).filter((question) => {
+        const verifiedQuestions = deduplicateQuestions(llmQuestions.map((q, i) =>
+          normalizeReinforcementOutput(
+            q,
+            weak[i % weak.length],
+            materialProfile?.subject,
+            i,
+            materialProfile,
+            wrongQuestions[i % Math.max(wrongQuestions.length, 1)]
+          )
+        ).filter((question) => {
           if (previousHashes.has(question.normalizedStemHash || '')) return false;
           if (!materialProfile) return true;
           return verifyQuestionAgainstProfile({
             ...question,
             type: 'short',
-            knowledgePointId: weak[0]?.id || '',
+            knowledgePointId: question.knowledgePointTitle || weak[0]?.id || '',
             qualityScore: 90,
             templateId: materialProfile.allowedTemplateIds[0],
           } as QuizQuestion, materialProfile).passed;
@@ -895,7 +1054,7 @@ export const generateReinforcementQuiz = async (
       return verifyQuestionAgainstProfile({
         ...question,
         type: 'short',
-        knowledgePointId: weak[0]?.id || '',
+        knowledgePointId: question.knowledgePointTitle || weak[0]?.id || '',
         qualityScore: 90,
         templateId: materialProfile.allowedTemplateIds[0],
       } as QuizQuestion, materialProfile).passed;
