@@ -314,7 +314,7 @@ export default function App() {
               {
                 const kpl=knowledgePoints.length>0?knowledgePoints:mockExtractKnowledgePoints(material.content,safeSub);
                 const ft=inferMaterialTopic(material.content,kpl,safeSub);
-                if(!inferMaterialProfile(material.content,kpl,safeSub)) throw new Error('no profile');
+                if(!ft||!ft.subject||ft.topicTag==="通用知识"||!ft.allowedTemplateIds||!ft.allowedTemplateIds.length){const tm={数学:["math-01","math-02","math-03","math-04","math-05"],语文:["chinese-01","chinese-02","chinese-03"],英语:["english-01","english-02","english-03"],物理:["physics-01","physics-02","physics-03"],化学:["chemistry-01","chemistry-02"],生物:["biology-01","biology-02"],历史:["history-01"],政治:["politics-01"],地理:["geography-01","geography-02","geography-03"]};const vids=tm[safeSub]||tm["数学"];ft={subject:safeSub,chapterTag:"初高中"+safeSub,topicTag:safeSub+"基础",allowedKeywords:[],allowedTemplateIds:vids,bannedKeywords:[]};}
                 const bps=kpl.slice(0,safeCnt).map((kp,i)=>({
                   id:'bp-'+i,templateId:ft.allowedTemplateIds[i%Math.max(ft.allowedTemplateIds.length,1)],
                   knowledgeCardId:kp.id,knowledgePoint:kp.title,targetAbility:kp.masteryTarget||'理解并掌握',
