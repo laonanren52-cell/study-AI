@@ -84,8 +84,6 @@ export default function App() {
   const [variantQuestions, setVariantQuestions] = useState<QuizQuestion[]>([]);
   const [activeVariantQuestionId, setActiveVariantQuestionId] = useState('');
   const [generationNotice, setGenerationNotice] = useState('');
-  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
-  const [generationError, setGenerationError] = useState('');
   const [materialProfile, setMaterialProfile] = useState<MaterialProfile | null>(null);
   const [reinforcementError, setReinforcementError] = useState('');
 
@@ -290,79 +288,94 @@ export default function App() {
       }
     });
 
-    const handleGenerateQuiz = () => {
-      console.log('[SUBMIT_GENERATE_CLICKED]');
-      setGenerationError('');
-      setIsGeneratingQuestions(true);
-      (async () => {
+    const handleGenerateQuiz = () =>
+    runWithLoading('AI 正在生成测评题目...', async () => {
+      if (contentType === 'exam') {
+        if (examQuestions.length > 0) {
+          const filtered = examQuestions.map(q => ({ ...q, qualityScore: q.qualityScore ?? 90 }));
+          console.log(`[真题模式] 使用 ${filtered.length} 道真题`);
+          setQuestions(filtered);
+          setAnswers([]);
+          setAiStatus(getAIStatus());
+          goToStep('quiz');
+          return;
+        }
+      }
+      let generated: QuizQuestion[] = [];
+      let orchestratorNotice = '';
+      const currentMaterialProfile = inferMaterialProfile(material.content, knowledgePoints, quizSettings.subjectType as string);
+      setMaterialProfile(currentMaterialProfile);
+
+      if (knowledgePoints.length > 0) {
         try {
-          await Promise.race([
-            (async () => {
-              const sel = quizSettings.subjectType;
-              const safeSub = (sel && sel !== '自动识别') ? sel : (materialProfile?.subject || '化学');
-              if (!safeSub || safeSub === '自动识别') throw new Error('无法识别学科');
-              const safeExam = (quizSettings.examType && quizSettings.examType !== '自动识别') ? quizSettings.examType : '课后小测';
-              const safeCnt = quizSettings.questionCount ?? 5;
-              const safeTP = (quizSettings.questionTypes?.length > 0) ? quizSettings.questionTypes : ['single'];
-              const safeDR = quizSettings.difficultyRatio ?? { easy: 40, medium: 40, hard: 20 };
-              console.log('[QUESTION_CONFIG]', {subject:safeSub,exam:safeExam,count:safeCnt,types:safeTP,ratio:safeDR});
-              if (contentType==='exam'&&examQuestions.length>0) { setQuestions(examQuestions.map(q=>({...q,qualityScore:q.qualityScore??90}))); setAnswers([]); setAiStatus(getAIStatus()); goToStep('quiz'); return; }
-              const ss={...quizSettings,subjectType:safeSub,examType:safeExam,questionCount:safeCnt,questionTypes:safeTP,difficultyRatio:safeDR};
-              let gen=[];let notice='';
-              // 直接使用本地题库，不调用 AI（避免卡死）
-              console.warn('[SKIP_AI_USE_FALLBACK_DIRECTLY]');
-              {
-                const kpl=knowledgePoints.length>0?knowledgePoints:mockExtractKnowledgePoints(material.content,safeSub);
-                const ft=inferMaterialTopic(material.content,kpl,safeSub);
-                if(!ft||!ft.subject||ft.topicTag==="通用知识"||!ft.allowedTemplateIds||!ft.allowedTemplateIds.length){const tm={数学:["math-01","math-02","math-03","math-04","math-05"],语文:["chinese-01","chinese-02","chinese-03"],英语:["english-01","english-02","english-03"],物理:["physics-01","physics-02","physics-03"],化学:["chemistry-01","chemistry-02"],生物:["biology-01","biology-02"],历史:["history-01"],政治:["politics-01"],地理:["geography-01","geography-02","geography-03"]};const vids=tm[safeSub]||tm["数学"];ft={subject:safeSub,chapterTag:"初高中"+safeSub,topicTag:safeSub+"基础",allowedKeywords:[],allowedTemplateIds:vids,bannedKeywords:[]};}
-                const bps=kpl.slice(0,safeCnt).map((kp,i)=>({
-                  id:'bp-'+i,templateId:ft.allowedTemplateIds[i%Math.max(ft.allowedTemplateIds.length,1)],
-                  knowledgeCardId:kp.id,knowledgePoint:kp.title,targetAbility:kp.masteryTarget||'理解并掌握',
-                  requiredMethods:kp.keyMethods?.slice(0,3)||['理解核心概念'],
-                  examPattern:(kp.examPatterns?.[0]||'基础概念题'),difficulty:(['简单','中等','较难'])[i%3],
-                  scoringPoints:[kp.description?.slice(0,50)||'核心概念正确'],
-                  commonWrongMethods:kp.commonMistakes?.slice(0,3)||['对该概念理解模糊'],
-                  sourceEvidence:kp.sourceEvidence||kp.description||'',estimatedTime:3
-                }));
-                gen=generateFallbackQuestionsFromBlueprints(bps,[],ss,ft);
-                setGenerationError('AI 生成失败，已使用本地题库兜底。');
-              }
-              if(!Array.isArray(gen)||gen.length===0) throw new Error('no questions');
-              const st2=inferMaterialProfile(material.content,knowledgePoints,safeSub)?.subject||safeSub;
-              if(isReadingSubject(st2)){setOriginalArticle(material.content);}else{setOriginalArticle('');}
-              setGenerationNotice(notice);
-              const fq=gen.map(q=>({...q,qualityScore:q.qualityScore??90}));
-              setQuestions(fq);setAnswers([]);setAiStatus(getAIStatus());
-              console.log('[FINAL_QUESTIONS_COUNT]',fq.length);
-              goToStep('quiz');
-            })(),
-            new Promise((_,rej)=>setTimeout(()=>rej(new Error('GENERATE_TIMEOUT')),20000))
-          ]);
-        } catch(e){
-          console.error('[GENERATE_FLOW_FINISHED] error:',(e).message); /* emergency: generate simple fallback */ const ekpl = knowledgePoints.length > 0 ? knowledgePoints : [{id:"auto",title:safeSub||"核心知识点"}]; const eqs = ekpl.slice(0,Math.max(quizSettings.questionCount||5,3)).map((kp,i)=>({id:"em-q-"+i,type:"single",question:"请根据所学内容回答：关于"+((kp.title||kp.name)||"该知识点")+"的核心要点是什么？",options:["A. 理解并掌握基本概念","B. 熟悉相关公式和定理","C. 能够应用知识解决实际问题","D. 以上都是"],answer:"D",difficulty:["简单","中等","较难"][i%3],explanation:"这是考察对该知识点的综合理解程度。",qualityScore:90,optionsExplanation:["","","",""],knowledgePointId:kp.id||"auto"})); setQuestions(eqs);; setAnswers([]); setAiStatus(getAIStatus()); goToStep('quiz'); console.log('[EMERGENCY_NAVIGATE_TO_QUIZ]'); return; 
-          if((e).message==='GENERATE_TIMEOUT'){
-            console.warn('[GENERATE_TIMEOUT] 20秒超时，紧急本地兜底');
-            setGenerationError('AI 请求超时，已使用本地题库兜底。');
-            try{
-              const ekp=knowledgePoints.length>0?knowledgePoints:mockExtractKnowledgePoints(material.content,quizSettings.subjectType||'化学');
-              const es=materialProfile?.subject||quizSettings.subjectType||'化学';
-              const et=inferMaterialTopic(material.content,ekp,es);
-              const ebs=ekp.slice(0,quizSettings.questionCount??5).map((kp,i)=>({
-                id:'em-'+i,templateId:et.allowedTemplateIds[i%Math.max(et.allowedTemplateIds.length,1)],
-                knowledgeCardId:kp.id,knowledgePoint:kp.title,targetAbility:kp.masteryTarget||'理解并掌握',
-                requiredMethods:kp.keyMethods?.slice(0,3)||['理解核心概念'],
-                examPattern:(kp.examPatterns?.[0]||'基础概念题'),difficulty:(['简单','中等','较难'])[i%3],
-                scoringPoints:[kp.description?.slice(0,50)||'核心概念正确'],
-                commonWrongMethods:kp.commonMistakes?.slice(0,3)||['对该概念理解模糊'],
-                sourceEvidence:kp.sourceEvidence||kp.description||'',estimatedTime:3
-              }));
-              const em=generateFallbackQuestionsFromBlueprints(ebs,[],quizSettings,et);
-              if(em.length>0){setQuestions(em.map(q=>({...q,qualityScore:q.qualityScore??90})));setAnswers([]);setAiStatus(getAIStatus());goToStep('quiz');}
-            } catch(fbErr){console.error('[EMERGENCY_FALLBACK_FAILED]',fbErr);}
-          } else { setGenerationError((e).message||'题目生成失败'); }
-        } finally { setIsGeneratingQuestions(false); console.log('[GENERATE_FLOW_FINISHED]'); }
-      })();
-    };
+          // 使用统一调度器：QuestionPlan → AI 出题 → fallback 补齐 → 主题校验 → 去重
+          const result = await generateQuizWithMeta(knowledgePoints, material.content, quizSettings);
+          generated = result.questions;
+          orchestratorNotice = result.orchestratorResult.generationNotice;
+          
+          // AI 调用追踪日志
+          const orch = result.orchestratorResult;
+          console.log('[AI_TRACE] ===== AI 调用追踪 =====');
+          console.log('[AI_TRACE] 目标题数:', quizSettings.questionCount);
+          console.log('[AI_TRACE] 实际生成:', generated.length);
+          console.log('[AI_TRACE] AI 用时:', orch.aiGenerationTimeMs ? orch.aiGenerationTimeMs + 'ms' : '未调用 AI');
+          console.log('[AI_TRACE] 使用 Fallback:', orch.usedFallback);
+          console.log('[AI_TRACE] Fallback 原因:', orch.fallbackReason || '无');
+          console.log('[AI_TRACE] 联网增强:', orch.webSearchUsed);
+          console.log('[AI_TRACE] 联网失败原因:', orch.webSearchFallbackReason || '无');
+          console.log('[AI_TRACE] ===== 追踪结束 =====');
+        } catch (err) {
+          console.warn('[智学闭环] generateQuizWithMeta 失败:', err);
+        }
+      }
+
+      if (generated.length === 0) {
+        // 兜底：使用 fallbackQuestionFactory
+        const subjectType = quizSettings.subjectType as string;
+        const kpList = knowledgePoints.length > 0
+          ? knowledgePoints
+          : mockExtractKnowledgePoints(material.content, subjectType);
+        const fallbackTopic = inferMaterialTopic(material.content, kpList, subjectType);
+        if (!inferMaterialProfile(material.content, kpList, subjectType)) {
+          setGenerationNotice('未能识别资料主题，请重新上传资料或手动选择初高中学科。系统未生成跨学科兜底题。');
+          setQuestions([]);
+          setAnswers([]);
+          goToStep('quiz');
+          return;
+        }
+        const pseudoBlueprints = kpList.slice(0, quizSettings.questionCount ?? 5).map((kp, i) => ({
+          id: `kp-${i}`,
+          templateId: fallbackTopic.allowedTemplateIds[i % Math.max(fallbackTopic.allowedTemplateIds.length, 1)],
+          knowledgeCardId: kp.id,
+          knowledgePoint: kp.title,
+          targetAbility: kp.masteryTarget || '理解并掌握',
+          requiredMethods: kp.keyMethods?.slice(0, 3) || ['理解核心概念'],
+          examPattern: (kp.examPatterns?.[0] || '基础概念题') as any,
+          difficulty: (['简单', '中等', '较难'] as const)[i % 3],
+          scoringPoints: [kp.description?.slice(0, 50) || '核心概念正确'],
+          commonWrongMethods: kp.commonMistakes?.slice(0, 3) || ['对该概念理解模糊'],
+          sourceEvidence: kp.sourceEvidence || kp.description || '',
+          estimatedTime: 3,
+        }));
+        generated = generateFallbackQuestionsFromBlueprints(pseudoBlueprints, [], quizSettings, fallbackTopic);
+        orchestratorNotice = orchestratorNotice || '未能连接外部 AI，已使用本地题库生成。';
+      }
+
+      const subjectType = currentMaterialProfile?.subject || quizSettings.subjectType as string;
+      if (isReadingSubject(subjectType)) {
+        setOriginalArticle(material.content);
+      } else {
+        setOriginalArticle('');
+      }
+
+      const allQuestions = generated.map(q => ({ ...q, qualityScore: q.qualityScore ?? 90 }));
+      
+      setGenerationNotice(orchestratorNotice);
+      setQuestions(allQuestions);
+      setAnswers([]);
+      setAiStatus(getAIStatus());
+      goToStep('quiz');
+    });
 
   const handleSubmitQuiz = () =>
     runWithLoading('系统正在评分并分析薄弱点...', async () => {
