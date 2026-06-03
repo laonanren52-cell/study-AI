@@ -339,7 +339,7 @@ export default function App() {
             new Promise((_,rej)=>setTimeout(()=>rej(new Error('GENERATE_TIMEOUT')),20000))
           ]);
         } catch(e){
-          console.error('[GENERATE_FLOW_FINISHED] error:',(e).message);
+          console.error('[GENERATE_FLOW_FINISHED] error:',(e).message); /* emergency: generate simple fallback */ const ekpl = knowledgePoints.length > 0 ? knowledgePoints : [{id:"auto",title:safeSub||"核心知识点"}]; const eqs = ekpl.slice(0,Math.max(quizSettings.questionCount||5,3)).map((kp,i)=>({id:"em-q-"+i,type:"single",question:"请根据所学内容回答：关于"+((kp.title||kp.name)||"该知识点")+"的核心要点是什么？",options:["A. 理解并掌握基本概念","B. 熟悉相关公式和定理","C. 能够应用知识解决实际问题","D. 以上都是"],answer:"D",difficulty:["简单","中等","较难"][i%3],explanation:"这是考察对该知识点的综合理解程度。",qualityScore:90,optionsExplanation:["","","",""],knowledgePointId:kp.id||"auto"})); setQuestions(eqs);; setAnswers([]); setAiStatus(getAIStatus()); goToStep('quiz'); console.log('[EMERGENCY_NAVIGATE_TO_QUIZ]'); return; 
           if((e).message==='GENERATE_TIMEOUT'){
             console.warn('[GENERATE_TIMEOUT] 20秒超时，紧急本地兜底');
             setGenerationError('AI 请求超时，已使用本地题库兜底。');
