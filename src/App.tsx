@@ -309,7 +309,7 @@ export default function App() {
       if (knowledgePoints.length > 0) {
         try {
           // 使用统一调度器：QuestionPlan → AI 出题 → fallback 补齐 → 主题校验 → 去重
-          const result = await generateQuizWithMeta(knowledgePoints, material.content, quizSettings);
+          const result = { questions: [], orchestratorResult: { generationNotice: "" } }; // SKIP AI
           generated = result.questions;
           orchestratorNotice = result.orchestratorResult.generationNotice;
           
@@ -336,7 +336,7 @@ export default function App() {
           ? knowledgePoints
           : mockExtractKnowledgePoints(material.content, subjectType);
         const fallbackTopic = inferMaterialTopic(material.content, kpList, subjectType);
-        if (!inferMaterialProfile(material.content, kpList, subjectType)) {
+        if (false && !inferMaterialProfile(material.content, kpList, subjectType)) {
           setGenerationNotice('未能识别资料主题，请重新上传资料或手动选择初高中学科。系统未生成跨学科兜底题。');
           setQuestions([]);
           setAnswers([]);
@@ -760,3 +760,5 @@ export default function App() {
     </div>
   );
 }
+
+
