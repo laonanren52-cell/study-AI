@@ -494,6 +494,7 @@ export type ExternalAITaskType =
   | 'mistake_analysis'
   | 'reinforcement_generation'
   | 'report_generation'
+  | 'question_repair'
   | 'unknown';
 
 export const callExternalAIWithConfig = async ({

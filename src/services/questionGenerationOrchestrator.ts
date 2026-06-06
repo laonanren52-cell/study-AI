@@ -24,7 +24,7 @@ import {
   verifyQuestionAgainstProfile,
   verifyQuestionTopicAlignment,
 } from './questionTopicVerifier';
-import { filterQuestionsByQualityGate } from './questionQualityGate';
+import { evaluateQuestionQuality, filterQuestionsByQualityGate } from './questionQualityGate';
 import { reviewQuestionsQuality } from './questionQualityService';
 import { generateFallbackQuestionsFromBlueprints } from './fallbackQuestionFactory';
 import { getWebEnhancedReferenceBundle } from './webEnhancedQuestionService';
@@ -353,15 +353,114 @@ function buildCandidatePlan(plan: QuestionPlanSlot[], startIndex: number, count:
   });
 }
 
-function applyDisplayGateWithStats(
+async function validateAndFilterQuestions(
   candidates: QuizQuestion[],
   config: QuestionGenerationConfig,
-  existingQuestions: QuizQuestion[] = []
-): { valid: QuizQuestion[]; rejected: QuizQuestion[] } {
-  const valid = applyDisplayGate(candidates, config, existingQuestions);
-  const validHashes = new Set(valid.map((question) => question.normalizedStemHash || question.question));
-  const rejected = candidates.filter((question) => !validHashes.has(question.normalizedStemHash || question.question));
-  return { valid, rejected };
+  existingQuestions: QuizQuestion[] = [],
+  options: { relaxed?: boolean; allowRepair?: boolean } = {}
+): Promise<{ valid: QuizQuestion[]; rejected: QuizQuestion[] }> {
+  const valid: QuizQuestion[] = [];
+  const rejected: QuizQuestion[] = [];
+  const seen = new Set(existingQuestions.map((question) => question.normalizedStemHash || question.question));
+
+  for (const candidate of candidates) {
+    const topicReview = verifyQuestionAgainstProfile(candidate, config.materialProfile);
+    if (!topicReview.passed) {
+      rejected.push(candidate);
+      continue;
+    }
+
+    const quality = evaluateQuestionQuality(candidate, config.materialProfile);
+    if (quality.passed) {
+      valid.push(candidate);
+      continue;
+    }
+
+    if (quality.level === 'soft') {
+      if (options.relaxed) {
+        valid.push(candidate);
+        continue;
+      }
+      if (options.allowRepair !== false && hasRealAIConfig()) {
+        const repaired = await repairQuestionByAI(candidate, config, quality.reason);
+        if (repaired) {
+          const repairedTopic = verifyQuestionAgainstProfile(repaired, config.materialProfile);
+          const repairedQuality = evaluateQuestionQuality(repaired, config.materialProfile);
+          if (repairedTopic.passed && (repairedQuality.passed || repairedQuality.level === 'soft')) {
+            valid.push(repaired);
+            continue;
+          }
+        }
+      }
+    }
+
+    rejected.push(candidate);
+  }
+
+  const deduped = deduplicateQuestions(valid, existingQuestions).filter((question) => {
+    const key = question.normalizedStemHash || question.question;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const acceptedKeys = new Set(deduped.map((question) => question.normalizedStemHash || question.question));
+  for (const candidate of valid) {
+    const key = candidate.normalizedStemHash || candidate.question;
+    if (!acceptedKeys.has(key)) rejected.push(candidate);
+  }
+  return { valid: deduped, rejected };
+}
+
+async function repairQuestionByAI(
+  question: QuizQuestion,
+  config: QuestionGenerationConfig,
+  reason: string
+): Promise<QuizQuestion | null> {
+  const prompt = `你是高中命题老师。下面这道题质量不够，请在不改变学科和知识点的前提下重写成真实可用题。
+
+问题原因：${reason}
+
+要求：
+1. 保留当前知识点
+2. 增加具体条件
+3. 给出明确标准答案
+4. 补充详细解析
+5. 不要写空泛题
+6. 题目必须符合上传资料
+7. 只输出 JSON：{"question": {...}}
+
+原题：
+${JSON.stringify(question)}`;
+
+  try {
+    const result = await callExternalAIWithConfig({
+      taskType: 'question_repair',
+      prompt,
+      modelConfig: getEffectiveAIConfig(),
+      materialProfile: config.materialProfile,
+    });
+    const raw = result as Record<string, unknown> | null;
+    const repaired = (raw?.question || raw) as Record<string, unknown> | null;
+    if (!repaired) return null;
+    return {
+      ...question,
+      question: String(repaired.question || question.question),
+      answer: String(repaired.answer || repaired.correctAnswer || question.answer),
+      explanation: String(repaired.explanation || question.explanation),
+      sourceEvidence: String(repaired.sourceEvidence || question.sourceEvidence || config.materialProfile.sourceSummary),
+      scoringRubric: Array.isArray(repaired.scoringPoints)
+        ? repaired.scoringPoints.map(String)
+        : Array.isArray(repaired.scoringRubric)
+          ? repaired.scoringRubric.map(String)
+          : question.scoringRubric,
+      solutionSteps: Array.isArray(repaired.solutionSteps) ? repaired.solutionSteps.map(String) : question.solutionSteps,
+      commonMistake: repaired.commonMistake ? String(repaired.commonMistake) : question.commonMistake,
+      qualityScore: 90,
+    };
+  } catch (error) {
+    console.warn('[QUESTION_REPAIR_FAILED]', error);
+    return null;
+  }
 }
 
 async function generateUntilTargetCount(
@@ -392,22 +491,24 @@ async function generateUntilTargetCount(
   }
 
   if (isRealAI) {
-    for (let round = 1; round <= 3 && validQuestions.length < targetCount; round++) {
+    for (let round = 1; round <= 4 && validQuestions.length < targetCount; round++) {
       const need = targetCount - validQuestions.length;
-      const candidateCount = need * 2;
+      const candidateCount = Math.max(need * 3, 10);
       const candidatePlan = buildCandidatePlan(questionPlan, validQuestions.length, candidateCount);
       try {
-        console.log('[AI_CANDIDATE_ROUND]', round, 'need=', need, 'candidateCount=', candidateCount);
+        console.log('[GEN_ROUND]', round);
+        console.log('[NEED_VALID_QUESTIONS]', need);
+        console.log('[CANDIDATE_COUNT]', candidateCount);
         const aiResult = await generateQuestionsWithAI(config, candidatePlan, referenceContext);
         aiGenerationTimeMs += aiResult.timeMs;
-        const checked = applyDisplayGateWithStats(aiResult.questions, config, validQuestions);
+        const checked = await validateAndFilterQuestions(aiResult.questions, config, validQuestions, { allowRepair: true });
         rejectedCount += checked.rejected.length;
         const before = validQuestions.length;
         validQuestions = deduplicateQuestions([...validQuestions, ...checked.valid]).slice(0, targetCount);
         const added = validQuestions.length - before;
         if (round > 1) autoSupplementedCount += added;
-        console.log('[AI_VALID_QUESTIONS_COUNT]', validQuestions.length);
-        console.log('[AI_REJECTED_QUESTIONS_COUNT]', rejectedCount);
+        console.log('[VALID_COUNT_AFTER_ROUND]', validQuestions.length);
+        console.log('[REJECTED_COUNT_AFTER_ROUND]', rejectedCount);
       } catch (err) {
         usedFallback = true;
         fallbackReason = `AI 调用失败: ${err instanceof Error ? err.message : '未知错误'}`;
@@ -421,8 +522,10 @@ async function generateUntilTargetCount(
     const beforeFallback = validQuestions.length;
     usedFallback = true;
     fallbackReason = fallbackReason || `AI 过质量门后仅 ${validQuestions.length}/${targetCount}，已使用同学科同知识点题库补齐。`;
+    const need = targetCount - validQuestions.length;
+    console.warn('[USE_FALLBACK_TO_FILL_COUNT]', need);
     const fallbackQuestions = generateFallbackFromPlan(config, questionPlan, validQuestions.length);
-    const checkedFallback = applyDisplayGateWithStats(fallbackQuestions, config, validQuestions);
+    const checkedFallback = await validateAndFilterQuestions(fallbackQuestions, config, validQuestions, { relaxed: true, allowRepair: false });
     rejectedCount += checkedFallback.rejected.length;
     validQuestions = deduplicateQuestions([...validQuestions, ...checkedFallback.valid]).slice(0, targetCount);
     autoSupplementedCount += Math.max(0, validQuestions.length - beforeFallback);

@@ -5,6 +5,7 @@ import { normalizeQuestionStem, normalizedStemHash } from './questionTopicVerifi
 export interface QuestionQualityGateResult {
   passed: boolean;
   reason: string;
+  level?: 'hard' | 'soft';
 }
 
 type QualityGateQuestion = Partial<QuizQuestion> & {
@@ -111,37 +112,51 @@ export function validateQuestionQuality(
   question: QualityGateQuestion,
   materialProfile: MaterialProfile
 ): QuestionQualityGateResult {
+  return evaluateQuestionQuality(question, materialProfile).passed
+    ? { passed: true, reason: '通过' }
+    : evaluateQuestionQuality(question, materialProfile);
+}
+
+export function evaluateQuestionQuality(
+  question: QualityGateQuestion,
+  materialProfile: MaterialProfile
+): QuestionQualityGateResult {
   const stem = normalizeText(question.question);
   const answer = getAnswer(question);
   const explanation = normalizeText(question.explanation);
   const sourceBasis = getSourceBasis(question);
   const knowledgePoint = getKnowledgePoint(question);
 
-  if (stem.length < 20) return { passed: false, reason: '题干少于20字，缺少真实考试条件' };
+  if (!stem) return { passed: false, reason: '题干为空', level: 'hard' };
+  if (/[�]{1,}|锛|绗|鐨|鍦|鈥|�/.test(stem + explanation + answer)) {
+    return { passed: false, reason: '题目包含乱码', level: 'hard' };
+  }
+  if (question.subject && question.subject !== materialProfile.subject) {
+    return { passed: false, reason: `题目学科${question.subject}与资料学科${materialProfile.subject}不一致`, level: 'hard' };
+  }
+  if (!answer) return { passed: false, reason: '标准答案为空', level: 'hard' };
+  if (!hasCoreConceptMatch(question, materialProfile)) {
+    return { passed: false, reason: '题目与上传资料核心知识点无关', level: 'hard' };
+  }
+  if (vagueAnswerPatterns.some((pattern) => pattern.test(answer))) {
+    return { passed: false, reason: '标准答案是泛化方法论，不是具体答案', level: 'hard' };
+  }
+  if (!knowledgePoint) return { passed: false, reason: '知识点为空', level: 'hard' };
+
+  if (stem.length < 20) return { passed: false, reason: '题干少于20字，缺少真实考试条件', level: 'soft' };
   if (genericStemPatterns.some((pattern) => pattern.test(stem))) {
-    return { passed: false, reason: '题干是空泛模板句式' };
+    return { passed: false, reason: '题干是空泛模板句式', level: 'soft' };
   }
   if (!hasConcreteSignal(question)) {
-    return { passed: false, reason: '题目缺少具体材料、数据、条件、句子、实验、区域或事件' };
+    return { passed: false, reason: '题目缺少具体材料、数据、条件、句子、实验、区域或事件', level: 'soft' };
   }
   if (materialProfile.subject === '数学' && !hasMathConcreteExpression(stem)) {
-    return { passed: false, reason: '数学题缺少具体公式、函数、方程、不等式或计算条件' };
+    return { passed: false, reason: '数学题缺少具体公式、函数、方程、不等式或计算条件', level: 'soft' };
   }
-  if (!answer) return { passed: false, reason: '标准答案为空' };
-  if (vagueAnswerPatterns.some((pattern) => pattern.test(answer))) {
-    return { passed: false, reason: '标准答案是泛化方法论，不是具体答案' };
-  }
-  if (explanation.length < 30) return { passed: false, reason: '解析少于30字，不能指导学生' };
-  if (!sourceBasis) return { passed: false, reason: '资料依据为空' };
-  if (!knowledgePoint) return { passed: false, reason: '知识点为空' };
-  if (question.subject && question.subject !== materialProfile.subject) {
-    return { passed: false, reason: `题目学科${question.subject}与资料学科${materialProfile.subject}不一致` };
-  }
-  if (!hasCoreConceptMatch(question, materialProfile)) {
-    return { passed: false, reason: '题目与上传资料核心知识点无关' };
-  }
+  if (explanation.length < 30) return { passed: false, reason: '解析少于30字，不能指导学生', level: 'soft' };
+  if (!sourceBasis) return { passed: false, reason: '资料依据为空', level: 'soft' };
   if (['short', 'solution', 'material'].includes(normalizeText(question.type)) && getScoringPoints(question).length === 0) {
-    return { passed: false, reason: '主观题缺少 scoringPoints/scoringRubric' };
+    return { passed: false, reason: '主观题缺少 scoringPoints/scoringRubric', level: 'soft' };
   }
 
   return { passed: true, reason: '通过' };
