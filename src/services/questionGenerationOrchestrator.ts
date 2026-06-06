@@ -32,6 +32,7 @@ import { generateKnowledgeCards, generateQuestionBlueprints, validateBlueprint }
 import { getExamStrategy, inferSubjectType } from './examStrategy';
 import { resolveActualSubject } from './subjectConfig';
 import { isLikelyXmlGarbage, cleanExtractedText } from '../utils/textCleaner';
+import { allocateDifficultySlots as allocateDifficultySlotsByRatio, normalizeDifficultyRatio } from './difficultyRatio';
 
 // ========== 信号：哪些题型是客观题/主观题 ==========
 const OBJECTIVE_TYPES = ['single', 'judge'] as const;
@@ -106,28 +107,7 @@ function allocateDifficultySlots(
   targetCount: number,
   difficultyRatio: { easy: number; medium: number; hard: number }
 ): Difficulty[] {
-  const total = difficultyRatio.easy + difficultyRatio.medium + difficultyRatio.hard;
-  if (total <= 0) {
-    // 默认分配
-    return Array.from({ length: targetCount }, (_, i) =>
-      (['简单', '中等', '较难'] as Difficulty[])[i % 3]
-    );
-  }
-  const easyCount = Math.round((difficultyRatio.easy / total) * targetCount);
-  const mediumCount = Math.round((difficultyRatio.medium / total) * targetCount);
-  const hardCount = targetCount - easyCount - mediumCount;
-
-  const slots: Difficulty[] = [];
-  for (let i = 0; i < easyCount; i++) slots.push('简单');
-  for (let i = 0; i < mediumCount; i++) slots.push('中等');
-  for (let i = 0; i < hardCount; i++) slots.push('较难');
-
-  // 打乱顺序，避免连续相同难度
-  for (let i = slots.length - 1; i > 0; i--) {
-    const j = Math.floor(((i * 2654435761) >>> 0) % (i + 1));
-    [slots[i], slots[j]] = [slots[j], slots[i]];
-  }
-  return slots;
+  return allocateDifficultySlotsByRatio(targetCount, difficultyRatio);
 }
 
 // ========== 题型分配 ==========
@@ -187,7 +167,8 @@ export async function generateQuestionsByConfig(
   console.log('[ORCHESTRATOR] 目标题数:', targetCount);
   console.log('[ORCHESTRATOR] 学科:', materialProfile.subject);
   console.log('[ORCHESTRATOR] 题型:', settings.questionTypes);
-  console.log('[ORCHESTRATOR] 难度比例:', settings.difficultyRatio);
+  const normalizedDifficultyRatio = normalizeDifficultyRatio(settings.difficultyRatio);
+  console.log('[ORCHESTRATOR] 难度比例:', normalizedDifficultyRatio);
   console.log('[ORCHESTRATOR] 考试类型:', settings.examType);
   console.log('[ORCHESTRATOR] 训练模式:', settings.trainingMode);
   console.log('[ORCHESTRATOR] 知识点数:', knowledgePoints.length);
@@ -196,7 +177,7 @@ export async function generateQuestionsByConfig(
   console.log('[QUESTION_CONFIG]', {
     targetCount,
     selectedQuestionTypes: settings.questionTypes,
-    difficultyRatio: settings.difficultyRatio,
+    difficultyRatio: normalizedDifficultyRatio,
     trainingMode: settings.trainingMode,
     examType: settings.examType === '自定义' ? settings.customExamType : settings.examType,
     materialProfile: {
@@ -273,66 +254,14 @@ export async function generateQuestionsByConfig(
     }
   }
 
-  // 步骤3: 尝试 AI 出题
-  let questions: QuizQuestion[] = [];
-  let aiGenerationTimeMs = 0;
-  let usedFallback = false;
-  let fallbackReason = '';
-
-  if (isRealAI) {
-    try {
-      const aiConfig = getEffectiveAIConfig();
-      console.log('[AI_PROVIDER]', aiConfig.provider);
-      console.log('[AI_MODEL]', aiConfig.model || getAIStatus().modeLabel);
-      console.log('[AI_REQUEST_START]', new Date().toISOString());
-      const aiResult = await generateQuestionsWithAI(config, questionPlan, referenceContext);
-      questions = aiResult.questions;
-      aiGenerationTimeMs = aiResult.timeMs;
-      console.log('[AI_GENERATION_TIME]', aiGenerationTimeMs, 'ms');
-      console.log('[AI_QUESTIONS_GENERATED]', questions.length);
-      console.log('[AI_USED_FALLBACK]', false);
-      questions = applyDisplayGate(questions, config);
-      if (questions.length < targetCount) {
-        const retryPlan = questionPlan.slice(questions.length);
-        if (retryPlan.length > 0) {
-          console.warn(`[ORCHESTRATOR] AI 题目过质量门后仅 ${questions.length}/${targetCount}，请求外接 AI 补生成`);
-          const retryResult = await generateQuestionsWithAI(config, retryPlan, referenceContext);
-          const retryPassed = applyDisplayGate(retryResult.questions, config, questions);
-          questions = [...questions, ...retryPassed].slice(0, targetCount);
-        }
-      }
-    } catch (err) {
-      usedFallback = true;
-      fallbackReason = `AI 调用失败: ${err instanceof Error ? err.message : '未知错误'}`;
-      console.error('[AI_USED_FALLBACK] true, 原因:', fallbackReason);
-    }
-  } else {
-    usedFallback = true;
-    fallbackReason = '未配置外部 AI，使用本地题库出题。';
-    console.log('[AI_USED_FALLBACK] true, 原因:', fallbackReason);
-  }
-
-  // 步骤4: 如果 AI 出题不足，用 fallback 补齐
-  if (questions.length < targetCount) {
-    console.log(`[ORCHESTRATOR] AI 出题 ${questions.length}/${targetCount}，需要补题`);
-    const fallbackQuestions = generateFallbackFromPlan(config, questionPlan, questions.length);
-    questions = [...questions, ...fallbackQuestions];
-    if (!usedFallback) {
-      usedFallback = true;
-      fallbackReason = `AI 仅生成 ${questions.length - fallbackQuestions.length} 道，已用本地题库补齐。`;
-    }
-  }
-
-  // 步骤5: 主题校验 + 质量门 + 去重
-  questions = applyDisplayGate(questions, config);
-
-  // 步骤6: 如果门禁后不足，最多补题 2 次。仍不足则宁可少题，不展示垃圾题。
-  for (let retry = 0; retry < 2 && questions.length < targetCount; retry++) {
-    console.log(`[ORCHESTRATOR] 门禁后 ${questions.length}/${targetCount}，第 ${retry + 1} 次补题`);
-    const extraFallback = generateFallbackFromPlan(config, questionPlan, questions.length);
-    const extraPassed = applyDisplayGate(extraFallback, config, questions);
-    questions = [...questions, ...extraPassed].slice(0, targetCount);
-  }
+  // 步骤3-6: AI 候选题循环补生成，最后才 fallback
+  const generationResult = await generateUntilTargetCount(config, questionPlan, referenceContext, isRealAI);
+  let questions = generationResult.questions;
+  const aiGenerationTimeMs = generationResult.aiGenerationTimeMs;
+  const usedFallback = generationResult.usedFallback;
+  const fallbackReason = generationResult.fallbackReason;
+  const rejectedCount = generationResult.rejectedCount;
+  const autoSupplementedCount = generationResult.autoSupplementedCount;
 
   // 步骤7: 最终截断到目标数量
   questions = questions.slice(0, targetCount);
@@ -346,6 +275,9 @@ export async function generateQuestionsByConfig(
     generationNotice = isRealAI
       ? `外接 AI 生成失败，已使用本地题库兜底。${fallbackReason ? `原因：${fallbackReason}` : ''}`
       : fallbackReason;
+  }
+  if (rejectedCount > 0 || autoSupplementedCount > 0) {
+    generationNotice += `${generationNotice ? '\n' : ''}已拦截 ${rejectedCount} 道低质量候选题，并自动补生成 ${autoSupplementedCount} 道。`;
   }
   if (settings.enableWebEnhancedQuestions && webSearchUsed && webContextUsedInPrompt) {
     generationNotice += `${generationNotice ? '\n' : ''}联网增强：已开启\n搜索关键词：${webSearchQuery}\n参考资料：${webReferenceCount} 条\n已用于本次出题：是\n联网增强已开启，已结合上传资料与联网参考生成题目。`;
@@ -411,6 +343,100 @@ export async function ensureQuestionCount({
   if (questions.length >= targetCount) return questions.slice(0, targetCount);
   const extra = generateFallbackFromPlan(config, questionPlan, questions.length);
   return applyDisplayGate([...questions, ...extra], config).slice(0, targetCount);
+}
+
+function buildCandidatePlan(plan: QuestionPlanSlot[], startIndex: number, count: number): QuestionPlanSlot[] {
+  if (plan.length === 0) return [];
+  return Array.from({ length: count }, (_, index) => {
+    const source = plan[(startIndex + index) % plan.length];
+    return { ...source, slotIndex: index };
+  });
+}
+
+function applyDisplayGateWithStats(
+  candidates: QuizQuestion[],
+  config: QuestionGenerationConfig,
+  existingQuestions: QuizQuestion[] = []
+): { valid: QuizQuestion[]; rejected: QuizQuestion[] } {
+  const valid = applyDisplayGate(candidates, config, existingQuestions);
+  const validHashes = new Set(valid.map((question) => question.normalizedStemHash || question.question));
+  const rejected = candidates.filter((question) => !validHashes.has(question.normalizedStemHash || question.question));
+  return { valid, rejected };
+}
+
+async function generateUntilTargetCount(
+  config: QuestionGenerationConfig,
+  questionPlan: QuestionPlanSlot[],
+  referenceContext: string,
+  isRealAI: boolean
+): Promise<{
+  questions: QuizQuestion[];
+  rejectedCount: number;
+  autoSupplementedCount: number;
+  aiGenerationTimeMs: number;
+  usedFallback: boolean;
+  fallbackReason: string;
+}> {
+  const targetCount = config.settings.questionCount;
+  let validQuestions: QuizQuestion[] = [];
+  let rejectedCount = 0;
+  let autoSupplementedCount = 0;
+  let aiGenerationTimeMs = 0;
+  let usedFallback = false;
+  let fallbackReason = '';
+
+  if (!isRealAI) {
+    usedFallback = true;
+    fallbackReason = '未配置外部 AI，使用本地题库出题。';
+    console.log('[AI_USED_FALLBACK] true, 原因:', fallbackReason);
+  }
+
+  if (isRealAI) {
+    for (let round = 1; round <= 3 && validQuestions.length < targetCount; round++) {
+      const need = targetCount - validQuestions.length;
+      const candidateCount = need * 2;
+      const candidatePlan = buildCandidatePlan(questionPlan, validQuestions.length, candidateCount);
+      try {
+        console.log('[AI_CANDIDATE_ROUND]', round, 'need=', need, 'candidateCount=', candidateCount);
+        const aiResult = await generateQuestionsWithAI(config, candidatePlan, referenceContext);
+        aiGenerationTimeMs += aiResult.timeMs;
+        const checked = applyDisplayGateWithStats(aiResult.questions, config, validQuestions);
+        rejectedCount += checked.rejected.length;
+        const before = validQuestions.length;
+        validQuestions = deduplicateQuestions([...validQuestions, ...checked.valid]).slice(0, targetCount);
+        const added = validQuestions.length - before;
+        if (round > 1) autoSupplementedCount += added;
+        console.log('[AI_VALID_QUESTIONS_COUNT]', validQuestions.length);
+        console.log('[AI_REJECTED_QUESTIONS_COUNT]', rejectedCount);
+      } catch (err) {
+        usedFallback = true;
+        fallbackReason = `AI 调用失败: ${err instanceof Error ? err.message : '未知错误'}`;
+        console.error('[AI_USED_FALLBACK] true, 原因:', fallbackReason);
+        break;
+      }
+    }
+  }
+
+  if (validQuestions.length < targetCount) {
+    const beforeFallback = validQuestions.length;
+    usedFallback = true;
+    fallbackReason = fallbackReason || `AI 过质量门后仅 ${validQuestions.length}/${targetCount}，已使用同学科同知识点题库补齐。`;
+    const fallbackQuestions = generateFallbackFromPlan(config, questionPlan, validQuestions.length);
+    const checkedFallback = applyDisplayGateWithStats(fallbackQuestions, config, validQuestions);
+    rejectedCount += checkedFallback.rejected.length;
+    validQuestions = deduplicateQuestions([...validQuestions, ...checkedFallback.valid]).slice(0, targetCount);
+    autoSupplementedCount += Math.max(0, validQuestions.length - beforeFallback);
+  }
+
+  console.log('[AI_USED_FALLBACK]', usedFallback);
+  return {
+    questions: validQuestions.slice(0, targetCount),
+    rejectedCount,
+    autoSupplementedCount,
+    aiGenerationTimeMs,
+    usedFallback,
+    fallbackReason,
+  };
 }
 
 // ========== AI 出题 ==========
@@ -539,14 +565,14 @@ ${constrainedMaterial.slice(0, 8000)}
     questions.push({
       id: rq.id ? String(rq.id) : `q-ai-${i + 1}`,
       subject: subject,
-      type: normalizeType(String(rq.type || planSlot.questionType), planSlot.questionType),
+      type: planSlot.questionType,
       question: String(rq.question || ''),
       options: options.length > 0 ? options : undefined,
       answer: String(rq.answer || ''),
       correctOptionLabel: extractCorrectLabel(String(rq.answer), String(rq.correctOptionLabel)),
       explanation: String(rq.explanation || ''),
       knowledgePointId: planSlot.knowledgePointId,
-      difficulty: normalizeDifficulty(String(rq.difficulty), planSlot.difficulty),
+      difficulty: planSlot.difficulty,
       sourceEvidence: String(rq.sourceEvidence || ''),
       qualityScore: 90,
       examPattern: (rq.examPattern as ExamQuestionPattern) || '基础概念题',

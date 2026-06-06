@@ -28,6 +28,12 @@ const providers: Array<{ value: AIProvider; label: string; description: string }
   { value: 'openai', label: 'OpenAI', description: '使用 Responses API。' },
   { value: 'deepseek', label: 'DeepSeek', description: '使用 OpenAI-compatible Chat Completions。' },
   { value: 'qwen', label: '通义千问 Qwen', description: '使用 DashScope 兼容模式。' },
+  { value: 'kimi', label: 'Moonshot / Kimi', description: '使用 OpenAI-compatible Chat Completions。' },
+  { value: 'zhipu', label: '智谱 GLM', description: '使用 GLM OpenAI-compatible 接口。' },
+  { value: 'baichuan', label: '百川 Baichuan', description: '使用 OpenAI-compatible Chat Completions。' },
+  { value: 'claude', label: 'Claude', description: '使用 Anthropic Messages 格式。' },
+  { value: 'ollama', label: 'Ollama 本地模型', description: '连接本机 Ollama /api/chat。' },
+  { value: 'lmstudio', label: 'LM Studio 本地模型', description: '默认按 OpenAI-compatible 处理。' },
   { value: 'custom', label: '自定义模型', description: '接入任意 OpenAI 兼容接口，支持所有兼容模型。' },
 ];
 
@@ -113,12 +119,13 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
   };
 
   const handleSaveCustomConfig = () => {
-    if (!customLabel.trim() || !config.apiKey || !config.model || !config.baseUrl) return;
+    if (!customLabel.trim() || (needsKey && !config.apiKey) || !config.model || !config.baseUrl) return;
     const newConfig = saveCustomConfig({
       label: customLabel.trim(),
       apiKey: config.apiKey,
       model: config.model,
       baseUrl: config.baseUrl,
+      apiFormat: config.apiFormat,
     });
     setCustomConfigs(getCustomConfigs());
     setCustomLabel('');
@@ -128,6 +135,7 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
       apiKey: config.apiKey,
       model: config.model,
       baseUrl: config.baseUrl,
+      apiFormat: config.apiFormat,
       label: customLabel.trim(),
       customId: newConfig.id,
     };
@@ -142,6 +150,7 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
       apiKey: c.apiKey,
       model: c.model,
       baseUrl: c.baseUrl,
+      apiFormat: c.apiFormat,
       label: c.label,
       customId: c.id,
     };
@@ -155,7 +164,7 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
     setCustomConfigs(getCustomConfigs());
   };
 
-  const needsKey = config.provider !== 'mock';
+  const needsKey = config.provider !== 'mock' && config.provider !== 'ollama' && config.provider !== 'lmstudio' && config.apiFormat !== 'ollama';
   const canSave = config.provider === 'mock' || testResult?.success;
 
   const modal = (
@@ -248,7 +257,7 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
                         <button
                           type="button"
                           onClick={handleSaveCustomConfig}
-                          disabled={!customLabel.trim() || !config.apiKey || !config.model || !config.baseUrl}
+                          disabled={!customLabel.trim() || (needsKey && !config.apiKey) || !config.model || !config.baseUrl}
                           className="focus-ring inline-flex items-center gap-1.5 rounded-xl bg-slate-700 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <Plus className="h-4 w-4" />
@@ -287,12 +296,27 @@ export default function AISettingsPanel({ open, onClose, onStatusChange }: AISet
                     />
                   </label>
 
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">API 格式</span>
+                    <select
+                      value={config.apiFormat || 'openai-compatible'}
+                      onChange={(event) => updateField('apiFormat', event.target.value)}
+                      className="focus-ring mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm"
+                    >
+                      <option value="openai-compatible">OpenAI-compatible</option>
+                      <option value="claude">Claude Messages</option>
+                      <option value="zhipu">Zhipu / GLM</option>
+                      <option value="ollama">Ollama</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </label>
+
                   {/* 测试连接按钮 */}
                   <div className="space-y-3">
                     <button
                       type="button"
                       onClick={handleTestConnection}
-                      disabled={testing || !config.apiKey || !config.model || !config.baseUrl}
+                      disabled={testing || (needsKey && !config.apiKey) || !config.model || !config.baseUrl}
                       className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-sky-200 bg-sky-50 px-5 py-3 text-sm font-semibold text-sky-700 shadow-sm hover:bg-sky-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
                     >
                       {testing ? (

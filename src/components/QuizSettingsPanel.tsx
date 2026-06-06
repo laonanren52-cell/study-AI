@@ -1,5 +1,6 @@
 ﻿import { Settings2 } from 'lucide-react';
 import { SUBJECT_DISPLAY_OPTIONS, EXAM_TYPE_DISPLAY_OPTIONS, SUBJECT_SCOPE_NOTICE, isSupportedDisplaySubject } from '../services/subjectConfig';
+import { normalizeDifficultyRatio, rebalanceDifficultyRatio } from '../services/difficultyRatio';
 import type { ExamType, QuestionType, QuizSettings, SubjectType, TrainingMode } from '../types';
 
 interface QuizSettingsPanelProps {
@@ -41,18 +42,11 @@ const sliderAccentClass: Record<string, string> = {
 
 export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPanelProps) {
   const update = (patch: Partial<QuizSettings>) => onChange({ ...settings, ...patch });
-  const ratioTotal = settings.difficultyRatio.easy + settings.difficultyRatio.medium + settings.difficultyRatio.hard;
-  const normalizedRatio = {
-    easy: ratioTotal > 0 ? Math.round((settings.difficultyRatio.easy / ratioTotal) * 100) : 20,
-    medium: ratioTotal > 0 ? Math.round((settings.difficultyRatio.medium / ratioTotal) * 100) : 50,
-    hard: ratioTotal > 0 ? Math.round((settings.difficultyRatio.hard / ratioTotal) * 100) : 30,
-  };
+  const normalizedRatio = normalizeDifficultyRatio(settings.difficultyRatio);
+  const ratioTotal = normalizedRatio.easy + normalizedRatio.medium + normalizedRatio.hard;
   const updateDifficulty = (key: keyof QuizSettings['difficultyRatio'], value: number) => {
     update({
-      difficultyRatio: {
-        ...settings.difficultyRatio,
-        [key]: Math.max(0, Math.min(100, Number.isNaN(value) ? 0 : value)),
-      },
+      difficultyRatio: rebalanceDifficultyRatio(normalizedRatio, key, Number.isNaN(value) ? 0 : value),
     });
   };
   const toggleQuestionType = (type: QuestionType) => {
@@ -204,7 +198,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
             <span className="text-sm font-medium text-slate-700">难度比例</span>
             <span className="text-xs text-slate-500">
-              当前输入合计 {ratioTotal}%；生成时按比例换算为 简单 {normalizedRatio.easy}% / 中等 {normalizedRatio.medium}% / 较难 {normalizedRatio.hard}%
+              当前比例：简单 {normalizedRatio.easy}% / 中等 {normalizedRatio.medium}% / 较难 {normalizedRatio.hard}%（合计 {ratioTotal}%）
             </span>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -223,7 +217,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
                     type="number"
                     min={0}
                     max={100}
-                    value={settings.difficultyRatio[key]}
+                    value={normalizedRatio[key]}
                     onChange={(event) => updateDifficulty(key, Number(event.target.value))}
                     className="focus-ring w-16 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm font-semibold text-slate-900"
                     aria-label={label + "题比例"}
@@ -233,7 +227,7 @@ export default function QuizSettingsPanel({ settings, onChange }: QuizSettingsPa
                   type="range"
                   min={0}
                   max={100}
-                  value={settings.difficultyRatio[key]}
+                  value={normalizedRatio[key]}
                   onChange={(event) => updateDifficulty(key, Number(event.target.value))}
                   className={"mt-3 h-2 w-full cursor-pointer " + sliderAccentClass[tone]}
                   aria-label={label + "题滑动比例"}

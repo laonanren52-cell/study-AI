@@ -3,7 +3,7 @@ export type Difficulty = '简单' | '中等' | '较难';
 export type QuestionType = 'single' | 'judge' | 'fill' | 'short' | 'solution' | 'material';
 export type MaterialFileType = 'txt' | 'pdf' | 'docx' | 'pptx' | 'image';
 export type ContentType = 'material' | 'exam';
-export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen' | 'custom';
+export type AIProvider = 'mock' | 'openai' | 'deepseek' | 'qwen' | 'kimi' | 'zhipu' | 'baichuan' | 'claude' | 'ollama' | 'lmstudio' | 'custom';
 export type SubjectType =
   | '语文'
   | '数学'

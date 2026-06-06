@@ -1,12 +1,14 @@
 ﻿import type { AIProvider, AIStatus } from '../types';
 
 import type { MaterialProfile } from './materialTopicService';
+import { callUniversalAI, inferAIFormat, type UniversalAIFormat } from './universalAIProvider';
 
 export interface RuntimeAIConfig {
   provider: AIProvider;
   apiKey: string;
   model: string;
   baseUrl: string;
+  apiFormat?: UniversalAIFormat;
   /** 自定义配置的显示名称 */
   label?: string;
   /** 自定义配置的唯一ID */
@@ -27,6 +29,12 @@ const providerLabels: Record<AIProvider, string> = {
   openai: 'OpenAI API 已启用',
   deepseek: 'DeepSeek API 已启用',
   qwen: 'Qwen API 已启用',
+  kimi: 'Moonshot/Kimi API 已启用',
+  zhipu: '智谱 GLM API 已启用',
+  baichuan: '百川 API 已启用',
+  claude: 'Claude API 已启用',
+  ollama: 'Ollama 本地模型已启用',
+  lmstudio: 'LM Studio 本地模型已启用',
   custom: '自定义模型已启用',
 };
 
@@ -43,10 +51,41 @@ const defaultProviderConfig: Record<Exclude<AIProvider, 'mock' | 'custom'>, Omit
     model: import.meta.env.VITE_QWEN_MODEL || 'qwen-plus',
     baseUrl: import.meta.env.VITE_QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   },
+  kimi: {
+    model: import.meta.env.VITE_KIMI_MODEL || 'moonshot-v1-8k',
+    baseUrl: import.meta.env.VITE_KIMI_BASE_URL || 'https://api.moonshot.cn/v1',
+  },
+  zhipu: {
+    model: import.meta.env.VITE_ZHIPU_MODEL || 'glm-4-flash',
+    baseUrl: import.meta.env.VITE_ZHIPU_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
+    apiFormat: 'zhipu',
+  },
+  baichuan: {
+    model: import.meta.env.VITE_BAICHUAN_MODEL || 'Baichuan4',
+    baseUrl: import.meta.env.VITE_BAICHUAN_BASE_URL || 'https://api.baichuan-ai.com/v1',
+  },
+  claude: {
+    model: import.meta.env.VITE_CLAUDE_MODEL || 'claude-3-5-sonnet-latest',
+    baseUrl: import.meta.env.VITE_CLAUDE_BASE_URL || 'https://api.anthropic.com',
+    apiFormat: 'claude',
+  },
+  ollama: {
+    model: import.meta.env.VITE_OLLAMA_MODEL || 'qwen2.5:7b',
+    baseUrl: import.meta.env.VITE_OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+    apiFormat: 'ollama',
+  },
+  lmstudio: {
+    model: import.meta.env.VITE_LMSTUDIO_MODEL || 'local-model',
+    baseUrl: import.meta.env.VITE_LMSTUDIO_BASE_URL || 'http://127.0.0.1:1234/v1',
+  },
 };
 
 const normalizeProvider = (value: unknown): AIProvider => {
-  if (value === 'openai' || value === 'deepseek' || value === 'qwen' || value === 'custom') return value;
+  if (
+    value === 'openai' || value === 'deepseek' || value === 'qwen' || value === 'kimi'
+    || value === 'zhipu' || value === 'baichuan' || value === 'claude' || value === 'ollama'
+    || value === 'lmstudio' || value === 'custom'
+  ) return value;
   return 'mock';
 };
 
@@ -58,6 +97,7 @@ export interface CustomModelConfig {
   apiKey: string;
   model: string;
   baseUrl: string;
+  apiFormat?: UniversalAIFormat;
   createdAt: number;
 }
 
@@ -106,10 +146,13 @@ const readStoredConfig = (): RuntimeAIConfig | null => {
     const apiKey = typeof parsed.apiKey === 'string' ? parsed.apiKey : '';
     const baseUrl = typeof parsed.baseUrl === 'string' && parsed.baseUrl ? parsed.baseUrl : '';
     const model = typeof parsed.model === 'string' && parsed.model ? parsed.model : '';
+    const apiFormat = typeof parsed.apiFormat === 'string'
+      ? parsed.apiFormat as UniversalAIFormat
+      : inferAIFormat(provider, baseUrl);
 
     // 自定义模型：只要有 apiKey、model、baseUrl 就接受
     if (provider === 'custom') {
-      if (!apiKey || !model || !baseUrl) {
+      if (!model || !baseUrl || (!apiKey && apiFormat !== 'ollama' && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(baseUrl))) {
         window.localStorage.removeItem(STORAGE_KEY);
         return null;
       }
@@ -118,13 +161,14 @@ const readStoredConfig = (): RuntimeAIConfig | null => {
         apiKey,
         model,
         baseUrl,
+        apiFormat,
         label: typeof parsed.label === 'string' ? parsed.label : undefined,
         customId: typeof parsed.customId === 'string' ? parsed.customId : undefined,
       };
     }
 
     // 内置模型：需要有效 API Key
-    if (!apiKey || apiKey.length < 10) {
+    if (!['ollama', 'lmstudio'].includes(provider) && (!apiKey || apiKey.length < 10)) {
       window.localStorage.removeItem(STORAGE_KEY);
       return null;
     }
@@ -133,6 +177,7 @@ const readStoredConfig = (): RuntimeAIConfig | null => {
       apiKey,
       model: model || defaultProviderConfig[provider].model,
       baseUrl: baseUrl || defaultProviderConfig[provider].baseUrl,
+      apiFormat: apiFormat || defaultProviderConfig[provider].apiFormat,
     };
   } catch {
     return null;
@@ -158,6 +203,39 @@ const getEnvConfig = (): RuntimeAIConfig | null => {
       model: import.meta.env.VITE_QWEN_MODEL || defaultProviderConfig.qwen.model,
       baseUrl: import.meta.env.VITE_QWEN_BASE_URL || defaultProviderConfig.qwen.baseUrl,
     },
+    kimi: {
+      apiKey: import.meta.env.VITE_KIMI_API_KEY || '',
+      model: import.meta.env.VITE_KIMI_MODEL || defaultProviderConfig.kimi.model,
+      baseUrl: import.meta.env.VITE_KIMI_BASE_URL || defaultProviderConfig.kimi.baseUrl,
+    },
+    zhipu: {
+      apiKey: import.meta.env.VITE_ZHIPU_API_KEY || '',
+      model: import.meta.env.VITE_ZHIPU_MODEL || defaultProviderConfig.zhipu.model,
+      baseUrl: import.meta.env.VITE_ZHIPU_BASE_URL || defaultProviderConfig.zhipu.baseUrl,
+      apiFormat: 'zhipu' as UniversalAIFormat,
+    },
+    baichuan: {
+      apiKey: import.meta.env.VITE_BAICHUAN_API_KEY || '',
+      model: import.meta.env.VITE_BAICHUAN_MODEL || defaultProviderConfig.baichuan.model,
+      baseUrl: import.meta.env.VITE_BAICHUAN_BASE_URL || defaultProviderConfig.baichuan.baseUrl,
+    },
+    claude: {
+      apiKey: import.meta.env.VITE_CLAUDE_API_KEY || '',
+      model: import.meta.env.VITE_CLAUDE_MODEL || defaultProviderConfig.claude.model,
+      baseUrl: import.meta.env.VITE_CLAUDE_BASE_URL || defaultProviderConfig.claude.baseUrl,
+      apiFormat: 'claude' as UniversalAIFormat,
+    },
+    ollama: {
+      apiKey: '',
+      model: import.meta.env.VITE_OLLAMA_MODEL || defaultProviderConfig.ollama.model,
+      baseUrl: import.meta.env.VITE_OLLAMA_BASE_URL || defaultProviderConfig.ollama.baseUrl,
+      apiFormat: 'ollama' as UniversalAIFormat,
+    },
+    lmstudio: {
+      apiKey: import.meta.env.VITE_LMSTUDIO_API_KEY || '',
+      model: import.meta.env.VITE_LMSTUDIO_MODEL || defaultProviderConfig.lmstudio.model,
+      baseUrl: import.meta.env.VITE_LMSTUDIO_BASE_URL || defaultProviderConfig.lmstudio.baseUrl,
+    },
   }[provider];
   return { provider, ...config };
 };
@@ -167,7 +245,7 @@ export const getDefaultAIConfig = (provider: AIProvider): RuntimeAIConfig => {
     return { provider: 'mock', apiKey: '', model: '', baseUrl: '' };
   }
   if (provider === 'custom') {
-    return { provider: 'custom', apiKey: '', model: '', baseUrl: 'https://api.example.com/v1' };
+    return { provider: 'custom', apiKey: '', model: '', baseUrl: 'https://api.example.com/v1', apiFormat: 'openai-compatible' };
   }
   const hardcoded = defaultProviderConfig[provider];
   const envModel = (import.meta.env as Record<string, string | undefined>)[`VITE_${provider.toUpperCase()}_MODEL`];
@@ -177,6 +255,7 @@ export const getDefaultAIConfig = (provider: AIProvider): RuntimeAIConfig => {
     apiKey: '',
     model: envModel || hardcoded.model,
     baseUrl: envBaseUrl || hardcoded.baseUrl,
+    apiFormat: hardcoded.apiFormat || inferAIFormat(provider, envBaseUrl || hardcoded.baseUrl),
   };
 };
 
@@ -217,80 +296,32 @@ export const testAPIConnection = async (config: RuntimeAIConfig): Promise<TestCo
     return { success: true, message: '演示模式无需测试连接' };
   }
 
-  if (!config.apiKey || !config.model || !config.baseUrl) {
+  if ((!config.apiKey && !['ollama', 'lmstudio'].includes(config.provider)) || !config.model || !config.baseUrl) {
     return { success: false, message: '请填写完整的 API Key、模型名称和 Base URL' };
   }
 
-  const baseUrl = config.baseUrl.replace(/\/$/, '');
-
   try {
-    // 使用 chat/completions 端点发送测试请求（OpenAI 兼容格式）
-    const testBody = JSON.stringify({
-      model: config.model,
-      messages: [{ role: 'user', content: '你好' }],
-      max_tokens: 10,
-      temperature: 0,
+    const content = await callUniversalAI({
+      config: {
+        provider: config.provider === 'mock' ? 'custom' : config.provider,
+        apiKey: config.apiKey,
+        model: config.model,
+        baseURL: config.baseUrl,
+        apiFormat: config.apiFormat || inferAIFormat(config.provider, config.baseUrl),
+        temperature: 0,
+        maxTokens: 16,
+        timeoutMs: 15000,
+      },
+      taskType: 'connection_test',
+      messages: [{ role: 'user', content: '请只回复 JSON：{"ok":true}' }],
     });
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    let response: Response;
-    try {
-      response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: testBody,
-        signal: controller.signal,
-      });
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      const err = fetchError as Error;
-      if (err.name === 'AbortError') {
-        return { success: false, message: '连接超时，请检查 Base URL 是否正确或网络是否连通' };
-      }
-      return { success: false, message: `网络连接失败：${err.message}。请检查 Base URL 是否正确` };
-    }
-    clearTimeout(timeoutId);
-
-    if (response.status === 401 || response.status === 403) {
-      return { success: false, message: 'API Key 无效或已过期，请检查后重试' };
-    }
-
-    if (response.status === 404) {
-      return { success: false, message: `模型 "${config.model}" 不存在或 Base URL 不正确，请检查模型名称` };
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      let errorMsg = `请求失败 (${response.status})`;
-      try {
-        const errorJson = JSON.parse(errorText);
-        if (errorJson.error?.message) {
-          errorMsg = errorJson.error.message;
-        }
-      } catch {}
-      return { success: false, message: errorMsg };
-    }
-
-    // 验证响应格式
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') {
-      return { success: false, message: 'API 响应格式异常，可能不是 OpenAI 兼容接口' };
-    }
-
-    const modelConfirmed = data?.model || config.model;
     return {
       success: true,
-      message: `连接成功，已切换到该模型`,
-      modelConfirmed,
+      message: `连接成功，已收到模型响应：${content.slice(0, 60)}`,
+      modelConfirmed: config.model,
     };
   } catch (error) {
-    return { success: false, message: `连接测试异常：${(error as Error).message}` };
+    return { success: false, message: `连接测试失败：${(error as Error).message}` };
   }
 };
 
@@ -348,7 +379,9 @@ export const getAIStatus = (): AIStatus => {
 
 export const hasRealAIConfig = () => {
   const config = getEffectiveAIConfig();
-  return config.provider !== 'mock' && Boolean(config.apiKey);
+  if (config.provider === 'mock') return false;
+  if (['ollama', 'lmstudio'].includes(config.provider)) return Boolean(config.baseUrl && config.model);
+  return Boolean(config.apiKey && config.baseUrl && config.model);
 };
 
 // ========== LLM 调用 ==========
@@ -513,17 +546,32 @@ export const callExternalAIWithConfig = async ({
 
   const start = Date.now();
   try {
-    const isOfficialOpenAI = config.provider === 'openai' && config.baseUrl.includes('api.openai.com');
     const temperature = options?.temperature ?? 0.2;
-    const result = isOfficialOpenAI
-      ? await callOpenAI(config, providedPrompt.systemPrompt, userPrompt, temperature)
-      : await callOpenAICompatible(config, providedPrompt.systemPrompt, userPrompt, temperature);
+    const rawText = await callUniversalAI({
+      config: {
+        provider: config.provider === 'mock' ? 'custom' : config.provider,
+        apiKey: config.apiKey,
+        model: config.model,
+        baseURL: config.baseUrl,
+        apiFormat: config.apiFormat || inferAIFormat(config.provider, config.baseUrl),
+        temperature,
+        maxTokens: options?.max_tokens,
+        timeoutMs: LLM_TIMEOUT_MS,
+      },
+      taskType,
+      messages: [
+        ...(providedPrompt.systemPrompt ? [{ role: 'system' as const, content: providedPrompt.systemPrompt }] : []),
+        { role: 'user' as const, content: userPrompt },
+      ],
+    });
+    const result = extractJsonFromText(rawText);
     runtimeStatus = {
       provider: config.provider,
       modeLabel: config.label || providerLabels[config.provider],
       isRealAI: true,
     };
     console.log('[AI_RAW_RESPONSE_LENGTH]', JSON.stringify(result).length);
+    console.log('[AI_RAW_RESPONSE_PREVIEW]', rawText.slice(0, 500));
     console.log('[AI_GENERATION_TIME]', Date.now() - start, 'ms');
     console.log('[AI_USED_FALLBACK]', false);
     console.log('[AI_TASK_TYPE]', taskType);
@@ -537,6 +585,7 @@ export const callExternalAIWithConfig = async ({
     };
     console.log('[AI_RAW_RESPONSE_LENGTH]', 0);
     console.log('[AI_GENERATION_TIME]', Date.now() - start, 'ms');
+    console.log('[AI_ERROR_REASON]', error instanceof Error ? error.message : '外接 AI 请求失败');
     console.log('[AI_USED_FALLBACK]', true, `原因: ${error instanceof Error ? error.message : '外接 AI 请求失败'}`);
     return null;
   }
