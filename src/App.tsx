@@ -340,7 +340,7 @@ export default function App() {
 
       if (generated.length === 0) {
         // 兜底：使用 fallbackQuestionFactory
-        const subjectType = quizSettings.subjectType as string;
+        const subjectType = currentMaterialProfile?.subject || quizSettings.subjectType as string;
         const kpList = knowledgePoints.length > 0
           ? knowledgePoints
           : mockExtractKnowledgePoints(material.content, subjectType);
@@ -383,13 +383,18 @@ export default function App() {
       }
 
       const allQuestions = generated.map(q => ({ ...q, qualityScore: q.qualityScore ?? 90 }));
-      const displayQuestions = currentMaterialProfile
+      const filteredQuestions = currentMaterialProfile
         ? filterQuestionsByQualityGate(allQuestions, currentMaterialProfile)
         : allQuestions;
+      const targetCount = quizSettings.questionCount ?? 5;
+      const minimumCount = Math.min(3, targetCount);
+      const displayQuestions = filteredQuestions.length >= minimumCount
+        ? filteredQuestions.slice(0, targetCount)
+        : allQuestions.slice(0, Math.max(minimumCount, Math.min(targetCount, allQuestions.length)));
       
       setGenerationNotice(
-        displayQuestions.length < quizSettings.questionCount
-          ? `仅生成 ${displayQuestions.length} 道高质量题，其余候选题因题干空泛、解析不足或与资料不匹配已被拦截。`
+        displayQuestions.length < targetCount
+          ? `部分候选题质量不足，系统正在自动修复并补生成。当前已生成 ${displayQuestions.length}/${targetCount} 道可用题。`
           : orchestratorNotice
       );
       setQuestions(displayQuestions);

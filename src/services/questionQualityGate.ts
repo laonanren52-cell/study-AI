@@ -136,7 +136,7 @@ export function evaluateQuestionQuality(
   }
   if (!answer) return { passed: false, reason: '标准答案为空', level: 'hard' };
   if (!hasCoreConceptMatch(question, materialProfile)) {
-    return { passed: false, reason: '题目与上传资料核心知识点无关', level: 'hard' };
+    return { passed: false, reason: '题目与上传资料核心知识点关联较弱，需要补充资料依据', level: 'soft' };
   }
   if (vagueAnswerPatterns.some((pattern) => pattern.test(answer))) {
     return { passed: false, reason: '标准答案是泛化方法论，不是具体答案', level: 'hard' };

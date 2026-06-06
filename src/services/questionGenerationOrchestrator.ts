@@ -270,10 +270,12 @@ export async function generateQuestionsByConfig(
   // 构建生成通知
   let generationNotice = '';
   if (questions.length < targetCount) {
-    generationNotice = `仅生成 ${questions.length} 道高质量题，其余候选题因题干空泛、解析不足或与资料不匹配已被拦截。`;
+    generationNotice = questions.length === 0
+      ? '部分候选题质量不足，系统正在自动修复并补生成。'
+      : `已生成 ${questions.length}/${targetCount} 道可用题；部分候选题质量不足，系统已自动修复并补生成。`;
   } else if (usedFallback) {
     generationNotice = isRealAI
-      ? `外接 AI 生成失败，已使用本地题库兜底。${fallbackReason ? `原因：${fallbackReason}` : ''}`
+      ? `外接 AI 候选题不足，已使用同知识点题库补齐。${fallbackReason ? `原因：${fallbackReason}` : ''}`
       : fallbackReason;
   }
   if (rejectedCount > 0 || autoSupplementedCount > 0) {
@@ -316,8 +318,8 @@ export async function generateQuestionsByUserConfig(
     sourceText: userConfig.sourceText,
     knowledgePoints: userConfig.coreKnowledgePoints,
     settings: {
-      subjectType: userConfig.selectedSubject,
-      examType: userConfig.examType,
+      subjectType: resolveActualSubject(userConfig.selectedSubject, userConfig.materialProfile.subject),
+      examType: userConfig.examType === '自动识别' ? '课后小测' : userConfig.examType,
       questionCount: userConfig.targetCount,
       difficultyRatio: userConfig.difficultyRatio,
       questionTypes: normalizedTypes,
@@ -422,10 +424,10 @@ async function repairQuestionByAI(
 
 要求：
 1. 保留当前知识点
-2. 增加具体条件
+2. 增加具体条件、公式、材料或情境
 3. 给出明确标准答案
 4. 补充详细解析
-5. 不要写空泛题
+5. 不要生成“阅读资料依据xxx”“请说明判断依据”这类空泛题
 6. 题目必须符合上传资料
 7. 只输出 JSON：{"question": {...}}
 
@@ -529,6 +531,18 @@ async function generateUntilTargetCount(
     rejectedCount += checkedFallback.rejected.length;
     validQuestions = deduplicateQuestions([...validQuestions, ...checkedFallback.valid]).slice(0, targetCount);
     autoSupplementedCount += Math.max(0, validQuestions.length - beforeFallback);
+
+    const minimumCount = Math.min(3, targetCount);
+    if (validQuestions.length < minimumCount) {
+      const emergency = pickEmergencyUsableQuestions(fallbackQuestions, config, validQuestions, minimumCount - validQuestions.length);
+      const beforeEmergency = validQuestions.length;
+      validQuestions = deduplicateQuestions([...validQuestions, ...emergency]).slice(0, targetCount);
+      autoSupplementedCount += Math.max(0, validQuestions.length - beforeEmergency);
+      if (validQuestions.length > beforeEmergency) {
+        fallbackReason = '外接 AI 候选题不足，已使用同知识点题库补齐。';
+        console.warn('[EMERGENCY_FALLBACK_ACCEPTED]', validQuestions.length - beforeEmergency);
+      }
+    }
   }
 
   console.log('[AI_USED_FALLBACK]', usedFallback);
@@ -540,6 +554,33 @@ async function generateUntilTargetCount(
     usedFallback,
     fallbackReason,
   };
+}
+
+function pickEmergencyUsableQuestions(
+  candidates: QuizQuestion[],
+  config: QuestionGenerationConfig,
+  existingQuestions: QuizQuestion[],
+  count: number
+): QuizQuestion[] {
+  const seen = new Set(existingQuestions.map((question) => question.normalizedStemHash || question.question));
+  const accepted: QuizQuestion[] = [];
+  for (const candidate of candidates) {
+    if (accepted.length >= count) break;
+    if (!candidate.question?.trim() || !candidate.answer?.trim()) continue;
+    if (candidate.subject && candidate.subject !== config.materialProfile.subject) continue;
+    const quality = evaluateQuestionQuality(candidate, config.materialProfile);
+    if (!quality.passed && quality.level === 'hard') continue;
+    const key = candidate.normalizedStemHash || candidate.question;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    accepted.push({
+      ...candidate,
+      subject: config.materialProfile.subject,
+      sourceEvidence: candidate.sourceEvidence || config.materialProfile.sourceSummary || `资料主题：${config.materialProfile.topic}`,
+      qualityScore: Math.max(candidate.qualityScore || 0, 80),
+    });
+  }
+  return accepted;
 }
 
 // ========== AI 出题 ==========

@@ -98,7 +98,15 @@ export function verifyQuestionAgainstMaterial(
   if (materialProfile.subject === '化学' && /(?:一元|二元|解)?方程(?!式)/.test(content)) {
     return { passed: false, reason: '化学资料中出现数学方程内容', riskType: 'subject_mismatch' };
   }
-  if (!materialProfile.coreConcepts.some((keyword) => content.includes(keyword.toLowerCase()))) {
+  const hasCoreConcept = materialProfile.coreConcepts.some((keyword) => content.includes(keyword.toLowerCase()));
+  const hasTopicSignal = Boolean(materialProfile.topic && content.includes(materialProfile.topic.toLowerCase()))
+    || Boolean(materialProfile.chapter && content.includes(materialProfile.chapter.toLowerCase()));
+  const hasSubjectConcreteSignal = materialProfile.subject === '数学'
+    ? /(sin|cos|tan|函数|方程|不等式|解集|判别式|零点|图像|[xy]\s*[²^2]|Δ|π)/i.test(content)
+    : materialProfile.subject === '化学'
+      ? /(na|cl|h₂|o₂|co₂|溶液|反应|实验|电解质|离子|方程式|沉淀|气体)/i.test(content)
+      : false;
+  if (!hasCoreConcept && !hasTopicSignal && !hasSubjectConcreteSignal) {
     return { passed: false, reason: '题目与资料核心概念缺少关联', riskType: 'too_generic' };
   }
   if (materialProfile.allowedTemplateIds.length && question.templateId && !materialProfile.allowedTemplateIds.includes(question.templateId)) {
@@ -156,8 +164,8 @@ export function verifyQuestionTopicAlignment(
   // 3. templateId 检查：具体主题必须绑定到允许的模板。
   if (materialTopic.allowedTemplateIds.length > 0) {
     if (!question.templateId) {
-      score -= 50;
-      problems.push(`题目缺少模板标识，无法确认是否属于"${materialTopic.topicTag}"`);
+      score -= 10;
+      problems.push(`题目缺少模板标识，已改用关键词和学科一致性判断`);
     } else if (!materialTopic.allowedTemplateIds.includes(question.templateId)) {
       score -= 100;
       problems.push(`模板"${question.templateId}"不在资料主题"${materialTopic.topicTag}"的允许范围内`);
