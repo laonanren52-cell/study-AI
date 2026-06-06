@@ -1047,7 +1047,7 @@ export const generateReinforcementQuiz = async (
 
   // Fallback: 使用高质量模板生成
   const previousHashes = new Set(previousQuestions.map((question) => normalizedStemHash(question.question)));
-  return deduplicateQuestions(generateFallbackReinforcementQuestions(weak, wrongQuestions, result, variantSeed, materialProfile)
+  const fallbackQuestions = deduplicateQuestions(generateFallbackReinforcementQuestions(weak, wrongQuestions, result, variantSeed, materialProfile)
     .filter((question) => {
       if (previousHashes.has(normalizedStemHash(question.question))) return false;
       if (!materialProfile) return true;
@@ -1059,6 +1059,27 @@ export const generateReinforcementQuiz = async (
         templateId: materialProfile.allowedTemplateIds[0],
       } as QuizQuestion, materialProfile).passed;
     }), previousQuestions).slice(0, targetCount);
+
+  if (fallbackQuestions.length > 0) return fallbackQuestions;
+
+  const baseQuestions = (wrongQuestions.length > 0 ? wrongQuestions : questions).filter(Boolean);
+  return baseQuestions.slice(0, targetCount).map((question, index) => normalizeReinforcementOutput(
+    {
+      question: `同类变式：${question.question}`,
+      answer: question.answer,
+      explanation: question.explanation,
+      solutionSteps: question.solutionSteps || [`回到知识点“${weak[index % weak.length].title}”`, '重新列出题干条件', '按原题同类方法完成计算或判断'],
+      scoringRubric: question.scoringRubric || ['条件提取正确', '过程完整', '结论准确'],
+      commonMistake: question.commonMistake || weak[index % weak.length].commonMistakes?.[0] || '忽略题干中的具体条件。',
+      sourceEvidence: question.sourceEvidence || weak[index % weak.length].sourceEvidence || materialProfile?.sourceSummary || '',
+      difficulty: question.difficulty,
+    },
+    weak[index % weak.length],
+    materialProfile?.subject,
+    index,
+    materialProfile,
+    question
+  ));
 };
 
 

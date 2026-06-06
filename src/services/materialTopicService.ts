@@ -106,6 +106,22 @@ const TOPIC_RULES: Array<{
     },
   },
   {
+    test: (t) =>
+      hasAny(t, ['二次函数', '一元二次方程', '一元二次不等式', '判别式', 'b²-4ac', 'b2-4ac', '解集', '恒成立'])
+      && !hasAny(t, ['三角函数', 'sin', 'cos', 'tan', '化学方程式', '离子', '反应', '溶液']),
+    topic: {
+      subject: '数学',
+      chapterTag: '第二章 一元二次函数、方程和不等式',
+      topicTag: '二次函数与一元二次方程、不等式',
+      allowedKeywords: [
+        '二次函数', '一元二次方程', '一元二次不等式', '判别式', 'Δ', 'b²-4ac',
+        '零点', '方程根', 'x轴交点', '解集', '开口方向', '函数图像', '恒成立', '参数'
+      ],
+      bannedKeywords: ['三角函数', 'sin', 'cos', 'tan', '正弦', '余弦', '几何证明', '概率', '数列', '导数'],
+      allowedTemplateIds: ['math-02'],
+    },
+  },
+  {
     test: (t) => hasAny(t, ['二次函数', '抛物线', 'y=ax', 'y=a*x']),
     topic: {
       subject: '数学',

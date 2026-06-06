@@ -66,7 +66,7 @@ export const generateLearningReport = (params: {
   reinforcementQuiz: ReinforcementQuestion[];
   questions?: QuizQuestion[];
   materialProfile?: MaterialProfile | null;
-  reportType?: 'student' | 'teacher' | 'blank';
+  reportType?: 'student' | 'teacher' | 'parent' | 'blank';
 }): LearningReport => {
   const { material, knowledgePoints, result, diagnosis, reviewPlan, reinforcementQuiz, materialProfile, questions = [], reportType = 'student' } = params;
   const createdAt = new Date().toLocaleString('zh-CN');
@@ -119,6 +119,94 @@ ${questions.length > 0 ? questions.map((item, index) => `## 第 ${index + 1} 题
 ${item.question}
 
 ${item.options?.length ? item.options.map((option, optionIndex) => `${String.fromCharCode(65 + optionIndex)}. ${option}`).join('\n') : '\n\n答题区：\n\n\n\n'}`).join('\n\n') : '暂无题目。'}`
+    };
+  }
+
+  if (reportType === 'parent') {
+    return {
+      title: `${material.title || '课后学习'}家长反馈`,
+      createdAt,
+      markdown: `# 家长版课后反馈
+
+生成时间：${createdAt}
+
+## 本节课学习内容
+
+- 学科：${materialProfile?.subject || subjectType}
+- 主题：${materialProfile?.topic || material.title || '本次学习资料'}
+- 核心知识点：${knowledgePoints.map((item) => item.title).slice(0, 5).join('、') || '本次资料核心内容'}
+
+## 学生表现
+
+- 本次得分：${result.score} 分
+- 掌握率：${result.masteryRate}%
+- 正确题数：${result.correctCount}
+- 错误题数：${result.wrongCount}
+
+## 掌握情况
+
+- 已掌握：${goodPoints.map((item) => item.knowledgePoint.title).join('、') || '暂未形成稳定优势点'}
+- 需要关注：${weakPoints.join('、') || result.weakKnowledgePoints.map((item) => item.title).join('、') || '继续巩固基础应用'}
+
+## 需要关注的问题
+
+${diagnosis.length > 0 ? diagnosis.slice(0, 3).map((item) => `- ${item.knowledgePointTitle}：${item.diagnosis}`).join('\n') : '- 本次错题较少，建议继续保持规范作答。'}
+
+## 下次课建议
+
+- 先复盘本次错题，再做同知识点变式训练。
+- 重点跟进：${weakPoints.join('、') || '本次资料核心知识点'}。
+- 建议完成 ${reinforcementQuiz.length || 3} 道强化题后再进行一次小测。
+
+## 给家长的简短反馈
+
+${parentFeedback}
+`,
+    };
+  }
+
+  if (reportType === 'teacher') {
+    return {
+      title: `${material.title || '课后测评'}教师版学情报告`,
+      createdAt,
+      markdown: `# 教师版课后学情报告
+
+生成时间：${createdAt}
+
+## 答题统计
+
+- 总分：${result.score} 分
+- 掌握率：${result.masteryRate}%
+- 正确题数：${result.correctCount}
+- 错误题数：${result.wrongCount}
+- 题型分布：${Object.entries(patternDistribution).map(([key, value]) => `${key} ${value}题`).join('、') || '暂无统计'}
+
+## 每个知识点掌握情况
+
+${result.byKnowledgePoint.map((item) => `- ${item.knowledgePoint.title}：${item.masteryRate}%（${item.status}）`).join('\n') || '- 暂无知识点统计'}
+
+## 错因分类
+
+${reasonSummary.length > 0 ? reasonSummary.map(([reason, count]) => `- ${reason}：${count} 次`).join('\n') : '- 本次暂无明显错因聚类'}
+
+## 题型薄弱点
+
+${weakPatterns.length > 0 ? weakPatterns.map((item) => `- ${item}`).join('\n') : '- 暂未发现集中薄弱题型'}
+
+## 后续教学建议
+
+- 优先补讲：${weakPoints.join('、') || result.weakKnowledgePoints.map((item) => item.title).join('、') || '本次资料核心知识点'}
+- 课堂处理：先用 1 道例题复盘错因，再安排 2-3 道同知识点变式。
+- 作业安排：保留步骤书写要求，重点检查判别式、图像区间、参数条件等关键环节。
+
+## 推荐强化训练方向
+
+${reinforcementQuiz.length > 0 ? reinforcementQuiz.slice(0, 5).map((item, index) => `- ${index + 1}. ${item.knowledgePointTitle}：${item.question}`).join('\n') : '- 暂无强化题，建议先生成复习强化训练。'}
+
+## 推荐补讲内容
+
+${missingRubric.length > 0 ? missingRubric.map((item) => `- ${item}`).join('\n') : '- 重点补讲薄弱知识点的条件识别、解题步骤和规范表达。'}
+`,
     };
   }
 
@@ -238,9 +326,10 @@ export const generateAIEnhancedLearningReport = async (params: Parameters<typeof
     taskType: 'report_generation',
     prompt: {
       systemPrompt: '你是初高中家教老师的课后报告助手，只输出 JSON。',
-      userPrompt: `请生成${params.reportType === 'teacher' ? '教师版' : '学生版'}学习报告 Markdown。
+      userPrompt: `请生成${params.reportType === 'teacher' ? '教师版' : params.reportType === 'parent' ? '家长版' : '学生版'}学习报告 Markdown。
 学生版必须包含：题目、答案、解析、错因、复习建议。
 教师版必须包含：答题统计、薄弱知识点、错因分类、教学建议。
+家长版必须包含：本节课学习内容、学生表现、掌握情况、需要关注的问题、下次课建议，语气专业、简洁、温和。
 禁止空泛套话，必须绑定当前题目、错因和薄弱知识点。
 输出格式：{"title":"","markdown":""}
 

@@ -22,7 +22,7 @@ interface ReportExportProps {
   reviewPlan: ReviewPlanDay[];
   reinforcementQuiz: ReinforcementQuestion[];
   questions?: QuizQuestion[];
-  onExport?: (type: 'student' | 'teacher' | 'blank') => void;
+  onExport?: (type: 'student' | 'teacher' | 'parent' | 'blank') => void;
   materialProfile?: MaterialProfile | null;
 }
 
@@ -52,7 +52,7 @@ function extractWeakPoints(diagnosis: DiagnosisItem[]): string[] {
 
 export default function ReportExport(props: ReportExportProps) {
   const [copied, setCopied] = useState(false);
-  const [reportType, setReportType] = useState<'student' | 'teacher' | 'blank'>('student');
+  const [reportType, setReportType] = useState<'student' | 'teacher' | 'parent' | 'blank'>('student');
   const reportParams = useMemo(() => ({ ...props, reportType }), [
     props.material,
     props.knowledgePoints,
@@ -94,7 +94,7 @@ export default function ReportExport(props: ReportExportProps) {
     };
   }, [fallbackReport, reportParams]);
 
-  const switchReportType = (type: 'student' | 'teacher' | 'blank') => {
+  const switchReportType = (type: 'student' | 'teacher' | 'parent' | 'blank') => {
     setReportType(type);
     props.onExport?.(type);
   };
@@ -145,7 +145,7 @@ export default function ReportExport(props: ReportExportProps) {
           </div>
 
           {/* 批量导出选项 */}
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-4 gap-3">
             <button
               onClick={() => switchReportType('student')}
               className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50 transition-colors"
@@ -161,6 +161,14 @@ export default function ReportExport(props: ReportExportProps) {
               <Users className="h-6 w-6 text-purple-600" />
               <span className="text-sm font-medium text-purple-700">教师版报告</span>
               <span className="text-xs text-purple-400">学情+统计+建议</span>
+            </button>
+            <button
+              onClick={() => switchReportType('parent')}
+              className="flex flex-col items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 hover:bg-emerald-100 transition-colors"
+            >
+              <Users className="h-6 w-6 text-emerald-600" />
+              <span className="text-sm font-medium text-emerald-700">家长版报告</span>
+              <span className="text-xs text-emerald-500">简洁反馈</span>
             </button>
             <button
               onClick={() => switchReportType('blank')}
