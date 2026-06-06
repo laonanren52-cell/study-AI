@@ -1,4 +1,4 @@
-import { Bot, BookOpen, Check, Clipboard, Download, FileText, FileType2, Printer, Users } from 'lucide-react';
+import { Check, Clipboard, Download, FileText, FileType2, Printer, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type {
   DiagnosisItem,
@@ -11,6 +11,7 @@ import type {
   ReviewPlanDay,
 } from '../types';
 import { downloadMarkdown, downloadWordReport, generateAIEnhancedLearningReport, generateLearningReport } from '../services/reportService';
+import type { ReportType } from '../services/reportService';
 import { formatFileSize } from '../utils/textClean';
 import type { MaterialProfile } from '../services/materialTopicService';
 
@@ -22,37 +23,13 @@ interface ReportExportProps {
   reviewPlan: ReviewPlanDay[];
   reinforcementQuiz: ReinforcementQuestion[];
   questions?: QuizQuestion[];
-  onExport?: (type: 'student' | 'teacher' | 'parent' | 'blank') => void;
+  onExport?: (type: ReportType) => void;
   materialProfile?: MaterialProfile | null;
-}
-
-function getMasteryLabel(masteryRate: number): string {
-  if (masteryRate >= 80) return '优秀';
-  if (masteryRate >= 60) return '良好';
-  if (masteryRate >= 40) return '一般';
-  return '待加强';
-}
-
-function getMasteryColor(masteryRate: number): string {
-  if (masteryRate >= 80) return 'text-green-600';
-  if (masteryRate >= 60) return 'text-blue-600';
-  if (masteryRate >= 40) return 'text-orange-600';
-  return 'text-red-600';
-}
-
-function extractWeakPoints(diagnosis: DiagnosisItem[]): string[] {
-  const weakTitles = new Set<string>();
-  for (const item of diagnosis) {
-    if (item.masteryStatus === '薄弱') {
-      weakTitles.add(item.knowledgePointTitle);
-    }
-  }
-  return Array.from(weakTitles);
 }
 
 export default function ReportExport(props: ReportExportProps) {
   const [copied, setCopied] = useState(false);
-  const [reportType, setReportType] = useState<'student' | 'teacher' | 'parent' | 'blank'>('student');
+  const [reportType, setReportType] = useState<ReportType>('student');
   const reportParams = useMemo(() => ({ ...props, reportType }), [
     props.material,
     props.knowledgePoints,
@@ -66,7 +43,6 @@ export default function ReportExport(props: ReportExportProps) {
   ]);
   const fallbackReport: LearningReport = useMemo(() => generateLearningReport(reportParams), [reportParams]);
   const [report, setReport] = useState<LearningReport>(fallbackReport);
-  const weakPoints = useMemo(() => extractWeakPoints(props.diagnosis), [props.diagnosis]);
   const sourceItems = [
     ['输入方式', props.material.sourceType === 'sample' ? '示例资料' : props.material.sourceType === 'file' ? '文件上传' : '文本粘贴'],
     props.material.fileName ? ['文件名', props.material.fileName] : null,
@@ -94,7 +70,7 @@ export default function ReportExport(props: ReportExportProps) {
     };
   }, [fallbackReport, reportParams]);
 
-  const switchReportType = (type: 'student' | 'teacher' | 'parent' | 'blank') => {
+  const switchReportType = (type: ReportType) => {
     setReportType(type);
     props.onExport?.(type);
   };
@@ -138,7 +114,7 @@ export default function ReportExport(props: ReportExportProps) {
               <Printer className="h-5 w-5" />
               打印 / 导出 PDF
             </button>
-            <button onClick={() => downloadWordReport(props)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 shadow-sm hover:border-sky-200 hover:bg-sky-50">
+            <button onClick={() => downloadWordReport(report)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 shadow-sm hover:border-sky-200 hover:bg-sky-50">
               <FileType2 className="h-5 w-5" />
               导出 Word 报告
             </button>
@@ -171,7 +147,7 @@ export default function ReportExport(props: ReportExportProps) {
               <span className="text-xs text-emerald-500">简洁反馈</span>
             </button>
             <button
-              onClick={() => switchReportType('blank')}
+              onClick={() => switchReportType('blank_paper')}
               className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50 transition-colors"
             >
               <Printer className="h-6 w-6 text-slate-600" />
@@ -193,172 +169,9 @@ export default function ReportExport(props: ReportExportProps) {
               <p className="mt-2 text-slate-500">生成时间：{report.createdAt}</p>
             </div>
 
-            {reportType === 'blank' ? (
-              <pre className="mt-5 whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 font-sans text-sm leading-7 text-slate-800">
-                {report.markdown}
-              </pre>
-            ) : (
-              <>
-            {/* AI 学习总结卡片 */}
-            <div className="mb-6 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Bot className="h-6 w-6 text-blue-600" />
-                <h2 className="text-xl font-bold text-blue-800">AI 学习总结报告</h2>
-              </div>
-
-              {/* 关键指标网格 */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                  <div className="text-3xl font-bold text-blue-600">{props.result.score ?? 0}</div>
-                  <div className="text-xs text-gray-500">总分</div>
-                </div>
-                <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                  <div className="text-3xl font-bold text-green-600">{props.result.masteryRate ?? 0}%</div>
-                  <div className="text-xs text-gray-500">掌握率</div>
-                </div>
-                <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                  <div className="text-3xl font-bold text-purple-600">{props.knowledgePoints?.length ?? 0}</div>
-                  <div className="text-xs text-gray-500">知识点数</div>
-                </div>
-                <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                  <div className={`text-3xl font-bold ${getMasteryColor(props.result.masteryRate ?? 0)}`}>
-                    {getMasteryLabel(props.result.masteryRate ?? 0)}
-                  </div>
-                  <div className="text-xs text-gray-500">掌握程度</div>
-                </div>
-              </div>
-
-              {/* 薄弱点 + 提升建议 */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white rounded-lg p-4 shadow-sm">
-                  <div className="text-sm font-medium text-red-600 mb-2">核心薄弱点</div>
-                  <div className="text-sm text-gray-700">
-                    {weakPoints.length > 0
-                      ? weakPoints.map((wp, i) => <div key={i}>- {wp}</div>)
-                      : '暂无薄弱知识点，继续保持！'
-                    }
-                  </div>
-                </div>
-                <div className="bg-white rounded-lg p-4 shadow-sm">
-                  <div className="text-sm font-medium text-blue-600 mb-2">提升建议</div>
-                  <div className="text-sm text-gray-700">
-                    <div>1. 重点复习薄弱知识点，确保核心概念理解到位</div>
-                    <div>2. 每天完成 3-5 道针对性练习题，巩固易错题型</div>
-                    <div>3. 按照复习计划执行，3 天后重新测评检验效果</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 知识点掌握热力图 */}
-            <div className="mt-6 rounded-2xl bg-slate-50 p-4">
-              <p className="font-semibold text-slate-950 mb-3">知识点掌握热力图</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {props.result.byKnowledgePoint.map((item) => {
-                  const rate = item.masteryRate;
-                  const colorClass = rate >= 80 ? 'bg-green-100 text-green-800 border-green-300' :
-                                     rate >= 60 ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                                     rate >= 40 ? 'bg-orange-100 text-orange-800 border-orange-300' :
-                                     'bg-red-100 text-red-800 border-red-300';
-                  const label = rate >= 80 ? '已掌握' :
-                                rate >= 60 ? '良好' :
-                                rate >= 40 ? '薄弱' : '未掌握';
-                  return (
-                    <div key={item.knowledgePoint.id} className={`rounded-lg border p-3 text-center ${colorClass}`}>
-                      <div className="text-xs font-medium truncate">{item.knowledgePoint.title}</div>
-                      <div className="text-lg font-bold mt-1">{rate}%</div>
-                      <div className="text-xs mt-0.5">{label}</div>
-                      <div className="text-xs text-slate-500">{item.correct}/{item.total}题</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 学习进度概览 */}
-            <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-              <p className="font-semibold text-slate-950 mb-3">学习进度概览</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-xl bg-white p-3 text-center">
-                  <div className="text-2xl font-bold text-sky-600">{props.result.correctCount}</div>
-                  <div className="text-xs text-slate-500">正确题数</div>
-                </div>
-                <div className="rounded-xl bg-white p-3 text-center">
-                  <div className="text-2xl font-bold text-rose-600">{props.result.wrongCount}</div>
-                  <div className="text-xs text-slate-500">错误题数</div>
-                </div>
-                <div className="rounded-xl bg-white p-3 text-center">
-                  <div className="text-2xl font-bold text-purple-600">{props.knowledgePoints.length}</div>
-                  <div className="text-xs text-slate-500">覆盖知识点</div>
-                </div>
-                <div className="rounded-xl bg-white p-3 text-center">
-                  <div className="text-2xl font-bold text-amber-600">{props.diagnosis.filter(d => d.masteryStatus === '薄弱').length}</div>
-                  <div className="text-xs text-slate-500">薄弱知识点</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-semibold text-slate-950">测评概览</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {[
-                    ['总分', `${props.result.score}`],
-                    ['掌握率', `${props.result.masteryRate}%`],
-                    ['正确题数', `${props.result.correctCount}`],
-                    ['错误题数', `${props.result.wrongCount}`],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-xl bg-white px-3 py-2">
-                      <p className="text-xs text-slate-400">{label}</p>
-                      <p className="mt-1 font-semibold text-slate-950">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-semibold text-slate-950">薄弱知识点排行</p>
-                <div className="mt-3 space-y-2">
-                  {(props.result.weakKnowledgePoints.length ? props.result.weakKnowledgePoints : props.knowledgePoints.slice(0, 3)).map((item, index) => (
-                    <div key={item.id} className="flex justify-between rounded-xl bg-white px-3 py-2">
-                      <span>{index + 1}. {item.title}</span>
-                      <span className="text-amber-700">待加强</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">知识点</th>
-                    <th className="px-4 py-3">掌握率</th>
-                    <th className="px-4 py-3">答对/总数</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {props.result.byKnowledgePoint.map((item) => (
-                    <tr key={item.knowledgePoint.id} className="border-t border-slate-200">
-                      <td className="px-4 py-3">{item.knowledgePoint.title}</td>
-                      <td className="px-4 py-3">{item.masteryRate}%</td>
-                      <td className="px-4 py-3">{item.correct}/{item.total}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-5 grid gap-3">
-              {props.reviewPlan.map((day) => (
-                <div key={day.day} className="rounded-2xl bg-slate-50 p-4">
-                  <p className="font-semibold text-slate-950">第 {day.day} 天：{day.goal}</p>
-                  <p className="mt-2 text-slate-600">任务：{day.checklist?.map((item) => item.text).join('；') || day.method}</p>
-                </div>
-              ))}
-            </div>
-              </>
-            )}
+            <pre className="mt-5 whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 font-sans text-sm leading-7 text-slate-800">
+              {report.markdown}
+            </pre>
           </div>
         </div>
       </div>
