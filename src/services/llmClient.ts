@@ -416,35 +416,44 @@ const getProxyUrl = (originalUrl: string): string => {
 
 const callOpenAICompatible = async (config: RuntimeAIConfig, systemPrompt: string, userPrompt: string, temperature: number) => {
   const fullUrl = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
-  const fetchUrl = getProxyUrl(fullUrl);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-  try {
-    const response = await fetch(fetchUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature,
-        response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`${config.provider} 请求失败：${response.status} ${await response.text()}`);
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') throw new Error(`${config.provider} 响应中没有 message.content。`);
-    return extractJsonFromText(content);
-  } finally {
-    clearTimeout(timeoutId);
+  const fetchUrls = Array.from(new Set([fullUrl, getProxyUrl(fullUrl)]));
+  let lastError: unknown = null;
+
+  for (const fetchUrl of fetchUrls) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+    try {
+      const response = await fetch(fetchUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`${config.provider} 请求失败：${response.status} ${await response.text()}`);
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string') throw new Error(`${config.provider} 响应中没有 message.content。`);
+      return extractJsonFromText(content);
+    } catch (error) {
+      lastError = error;
+      console.warn('[AI_REQUEST_RETRY]', fetchUrl === fullUrl ? 'direct_failed_try_proxy' : 'proxy_failed', error);
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
+
+  throw lastError instanceof Error ? lastError : new Error(`${config.provider} 请求失败`);
 };
 
 export type ExternalAITaskType =

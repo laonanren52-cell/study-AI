@@ -228,6 +228,7 @@ export async function generateQuestionsByConfig(
       const stage = materialProfile.stage === '初中' ? '初中' : '高中';
       const webQuery = `${stage}${materialProfile.subject}${knowledgePoints.map((kp) => kp.title).slice(0, 3).join(' ')} ${settings.examType} ${settings.questionTypes.join(' ')} 真题 例题 考点`;
       webSearchQuery = webQuery;
+      console.log('[WEB_SEARCH_ENABLED]', true);
       console.log('[WEB_SEARCH_QUERY]', webQuery);
       const webBundle = await getWebEnhancedReferenceBundle(
         true,
@@ -240,26 +241,34 @@ export async function generateQuestionsByConfig(
       if (referenceContext) {
         webSearchUsed = true;
         webContextUsedInPrompt = true;
-        console.log('[WEB_SEARCH_ENABLED] true');
         console.log('[WEB_SEARCH_RESULTS_COUNT]', webReferenceCount);
         console.log('[WEB_REFERENCE_CONTEXT_LENGTH]', referenceContext.length);
         console.log('[WEB_CONTEXT_USED_IN_PROMPT]', true);
       } else if (webBundle.error === 'NO_SEARCH_PROVIDER') {
-        webSearchFallbackReason = '联网增强：已开启\n搜索关键词：' + webQuery + '\n参考资料：0 条\n已用于本次出题：否\n联网搜索未配置，已使用课件内容 + 外接 AI 出题。';
+        webSearchFallbackReason = '联网搜索未配置，仅使用上传资料 + 外接 AI 出题。\n搜索关键词：' + webQuery + '\n参考资料：0 条\n已用于本次出题：否';
         console.log('[WEB_SEARCH_ENABLED] true, searchProvider 未配置');
         console.log('[WEB_SEARCH_RESULTS_COUNT]', 0);
+        console.log('[WEB_REFERENCE_CONTEXT_LENGTH]', 0);
+        console.log('[WEB_CONTEXT_USED_IN_PROMPT]', false);
+      } else if (webBundle.error) {
+        webSearchFallbackReason = `联网搜索失败：${webBundle.error}，已降级为上传资料 + 外接 AI 出题。\n搜索关键词：${webQuery}\n参考资料：0 条\n已用于本次出题：否`;
+        console.warn('[WEB_SEARCH_ENABLED] 搜索失败:', webBundle.error);
+        console.log('[WEB_SEARCH_RESULTS_COUNT]', 0);
+        console.log('[WEB_REFERENCE_CONTEXT_LENGTH]', 0);
         console.log('[WEB_CONTEXT_USED_IN_PROMPT]', false);
       } else {
         webSearchUsed = true;
         webSearchFallbackReason = '联网增强：已开启\n搜索关键词：' + webQuery + '\n参考资料：0 条\n已用于本次出题：否\n联网增强已开启，已结合上传资料与外接 AI 生成题目。';
         console.log('[WEB_SEARCH_ENABLED] true, 搜索返回 0 条');
         console.log('[WEB_SEARCH_RESULTS_COUNT]', webReferenceCount);
+        console.log('[WEB_REFERENCE_CONTEXT_LENGTH]', 0);
         console.log('[WEB_CONTEXT_USED_IN_PROMPT]', false);
       }
     } catch (err) {
-      webSearchFallbackReason = '联网搜索异常，已降级为上传资料 + 外接 AI 出题。';
+      webSearchFallbackReason = `联网搜索异常：${err instanceof Error ? err.message : '未知错误'}，已降级为上传资料 + 外接 AI 出题。`;
       console.warn('[WEB_SEARCH_ENABLED] 请求失败:', err);
       console.log('[WEB_SEARCH_RESULTS_COUNT]', 0);
+      console.log('[WEB_REFERENCE_CONTEXT_LENGTH]', 0);
       console.log('[WEB_CONTEXT_USED_IN_PROMPT]', false);
     }
   }
@@ -333,8 +342,10 @@ export async function generateQuestionsByConfig(
   let generationNotice = '';
   if (questions.length < targetCount) {
     generationNotice = `仅生成 ${questions.length} 道高质量题，其余候选题因题干空泛、解析不足或与资料不匹配已被拦截。`;
-  } else if (usedFallback && !isRealAI) {
-    generationNotice = fallbackReason;
+  } else if (usedFallback) {
+    generationNotice = isRealAI
+      ? `外接 AI 生成失败，已使用本地题库兜底。${fallbackReason ? `原因：${fallbackReason}` : ''}`
+      : fallbackReason;
   }
   if (settings.enableWebEnhancedQuestions && webSearchUsed && webContextUsedInPrompt) {
     generationNotice += `${generationNotice ? '\n' : ''}联网增强：已开启\n搜索关键词：${webSearchQuery}\n参考资料：${webReferenceCount} 条\n已用于本次出题：是\n联网增强已开启，已结合上传资料与联网参考生成题目。`;
@@ -435,7 +446,14 @@ async function generateQuestionsWithAI(
     ].join('\n');
   }
 
-  const systemPrompt = `你是面向初高中家教老师的课后测评命题专家。你必须严格按要求输出 JSON。
+  const systemPrompt = `你是高中学科命题老师。请严格围绕上传资料和联网参考内容生成真实可练习的考试题。
+禁止生成空泛题，禁止生成“资料依据xxx”“阅读资料依据xxx”“能结合资料条件完成具体判断”“请说明判断依据”“指出一个易错点”这类模板题。
+每道题必须有具体条件、明确设问、标准答案、详细解析、常见误区。
+题目必须像真实高中课堂练习/周测/考试题。
+如果资料是数学，必须出现具体表达式、函数、方程、不等式、条件或计算目标。
+如果资料是化学，必须出现具体物质、反应、实验或条件。
+联网资料只用于参考题型风格，不得复制原题。
+你必须严格按要求输出 JSON。
 ${examTypeInstructions}
 ${trainingModeInstructions}
 学科守卫：所有题目必须属于 ${subject}，不得跨学科。
@@ -479,7 +497,9 @@ ${constrainedMaterial.slice(0, 8000)}
 ⚠️ 每道题的 type 必须严格按计划。
 ⚠️ 每道题的 difficulty 必须严格按计划。
 ⚠️ 每道题的 knowledgePoint 必须严格按计划。
-⚠️ 简答/解答/材料分析题的 answer 必须是具体的分点答案，不能是泛化方法论。`;
+⚠️ 简答/解答/材料分析题的 answer 必须是具体的分点答案，不能是泛化方法论。
+⚠️ 禁止出现“资料依据xxx”“阅读资料依据xxx”“能结合资料条件完成具体判断”“请说明判断依据”“指出一个易错点”。
+⚠️ 数学题必须包含具体公式/函数/方程/不等式/条件，例如“已知 sinα=3/5，且 α 为第二象限角，求 cosα 和 tanα”。`;
 
   const requestStart = Date.now();
   console.time('[AI_GENERATION_TIME]');

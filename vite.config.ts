@@ -3,4 +3,13 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      '/web-search': {
+        target: 'https://lite.duckduckgo.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/web-search/, '/lite/'),
+      },
+    },
+  },
 });

@@ -20,7 +20,9 @@ const genericStemPatterns = [
   /下列(说法|选项|理解|表述).{0,10}(正确|恰当)的是/,
   /以下(说法|选项|理解|表述).{0,10}(正确|恰当)的是/,
   /根据资料，?关于.{0,20}的理解正确/,
+  /资料依据/,
   /阅读资料依据/,
+  /能结合资料条件完成具体判断/,
   /完成具体判断/,
   /写出关键条件/,
   /请说明.{0,30}判断依据/,
@@ -102,6 +104,9 @@ const hasCoreConceptMatch = (question: QualityGateQuestion, materialProfile: Mat
   return false;
 };
 
+const hasMathConcreteExpression = (stem: string): boolean =>
+  /([a-zA-Zαβθ]\s*[=<>]|[xy]\s*[²^2]|sin|cos|tan|Δ|b²-4ac|方程|不等式|函数|解集|根|象限|π|\d+\s*[+\-*/]\s*\d+)/i.test(stem);
+
 export function validateQuestionQuality(
   question: QualityGateQuestion,
   materialProfile: MaterialProfile
@@ -118,6 +123,9 @@ export function validateQuestionQuality(
   }
   if (!hasConcreteSignal(question)) {
     return { passed: false, reason: '题目缺少具体材料、数据、条件、句子、实验、区域或事件' };
+  }
+  if (materialProfile.subject === '数学' && !hasMathConcreteExpression(stem)) {
+    return { passed: false, reason: '数学题缺少具体公式、函数、方程、不等式或计算条件' };
   }
   if (!answer) return { passed: false, reason: '标准答案为空' };
   if (vagueAnswerPatterns.some((pattern) => pattern.test(answer))) {

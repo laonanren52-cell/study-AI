@@ -36,6 +36,32 @@ http.createServer((req, res) => {
     return;
   }
 
+  if (req.url?.startsWith('/web-search')) {
+    const requestUrl = new URL(req.url, `http://127.0.0.1:${port}`);
+    const query = requestUrl.searchParams.get('q') || '';
+    if (!query.trim()) {
+      res.writeHead(400, { 'Content-Type': 'text/plain;charset=utf-8' });
+      res.end('Missing q');
+      return;
+    }
+    fetch('https://lite.duckduckgo.com/lite/?q=' + encodeURIComponent(query), {
+      headers: { 'User-Agent': 'Mozilla/5.0 ZhixueLoop/1.0' },
+    })
+      .then(async (searchRes) => {
+        const text = await searchRes.text();
+        res.writeHead(searchRes.ok ? 200 : searchRes.status, {
+          'Content-Type': 'text/html;charset=utf-8',
+          'Cache-Control': 'no-cache',
+        });
+        res.end(text);
+      })
+      .catch((error) => {
+        res.writeHead(502, { 'Content-Type': 'text/plain;charset=utf-8' });
+        res.end('WEB_SEARCH_FAILED: ' + (error?.message || 'unknown'));
+      });
+    return;
+  }
+
   const filePath = path.join(distDir, req.url === '/' ? 'index.html' : req.url);
   const ext = path.extname(filePath);
   const ct = MIME[ext] || 'application/octet-stream';
