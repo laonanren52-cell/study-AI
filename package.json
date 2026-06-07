@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node watch.mjs",
+    "dev": "vite --host 127.0.0.1 --port 5188 --strictPort",
     "build": "node build.mjs",
     "preview": "node preview.mjs",
     "typecheck": "tsc -b"

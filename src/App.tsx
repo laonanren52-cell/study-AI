@@ -66,6 +66,7 @@ function isReadingSubject(subjectType?: string): boolean {
 }
 
 export default function App() {
+  console.log('[APP_RENDER]', Date.now());
   const [step, setStep] = useState<AppStep>('home');
   const [visitedSteps, setVisitedSteps] = useState<AppStep[]>([]);
   const [material, setMaterial] = useState<MaterialInputType>(emptyMaterial);
@@ -92,6 +93,7 @@ export default function App() {
 
   // 启动时自动检测 API 可用性
   useEffect(() => {
+    console.log('[AI_STARTUP_EFFECT_TRIGGERED]');
     autoDetectAPIOnStartup().then(({ status, degraded }) => {
       setAiStatus(status);
       if (degraded) {

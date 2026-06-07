@@ -12,6 +12,7 @@ import type {
 } from '../types';
 import type { MaterialProfile } from './materialTopicService';
 import { deduplicateQuestions, verifyQuestionAgainstProfile } from './questionTopicVerifier';
+import { isSimilarQuestion } from './questionQualityGate';
 
 const VALID_PATTERNS: ExamQuestionPattern[] = [
   '基础概念题', '公式套用题', '条件辨析题',
@@ -76,11 +77,18 @@ export const generateFallbackReinforcementQuestions = (
       q.knowledgePointId === wp.id || q.knowledgePointId.includes(wp.id)
     );
 
-    const rawQuestion = buildCleanReinforcement(wp, relatedWrong, subject, i + rotation);
+    const rawQuestion = isMathSubject(subject)
+      ? buildMathReinforcement(wp, relatedWrong, i + rotation, random)
+      : buildCleanReinforcement(wp, relatedWrong, subject, i + rotation);
 
     return repairReinforcementQuestion(rawQuestion, wp, relatedWrong, subject, materialProfile, i);
   });
-  const unique = deduplicateQuestions(generated);
+  const stems: string[] = [];
+  const unique = deduplicateQuestions(generated).filter((question) => {
+    if (stems.some((stem) => isSimilarQuestion(stem, question.question))) return false;
+    stems.push(question.question);
+    return true;
+  });
   return unique.filter((question) => {
     question.subject = subject;
     if (!materialProfile) return true;
@@ -100,7 +108,7 @@ const looksGarbled = (value: unknown): boolean =>
   /�|鍙|鐨|绗|鏁|璇|鑻|鐗|鍖|鍦|寮|涔|紝|锛|宸|糮|宐/.test(String(value ?? ''));
 
 const isAbstractPracticeStem = (value: string): boolean =>
-  /阅读资料依据|完成具体判断|写出关键条件|请说明.{0,30}判断依据|指出一个易错点|请结合资料分析/.test(value);
+  /资料依据|阅读资料依据|能结合资料条件完成具体判断|只要记住名称即可|不需要回到资料条件中验证|完成具体判断|写出关键条件|请说明.{0,30}判断依据|指出一个易错点|请结合资料分析|围绕.{0,30}完成知识点强化/.test(value);
 
 const cleanSource = (
   wp: KnowledgePoint,
@@ -153,7 +161,13 @@ const buildConcreteReinforcementStem = (
     return `[变式训练 ${displayNumber(index)}] ${geo[index % geo.length]}`;
   }
   if (subject === '数学') {
-    return `[变式训练 ${displayNumber(index)}] 已知 tanA = -5/12，且 A 是第四象限角，求 sinA 和 cosA，并写出符号判断依据。`;
+    const math = [
+      '已知 tanα=3/4，且 α 为第一象限角，求 sinα 和 cosα。',
+      '已知 sinα=5/13，且 α 为第二象限角，求 cosα 和 tanα。',
+      '求不等式 x²-5x+6>0 的解集，并说明图像与 x 轴的位置关系。',
+      '已知不等式 ax²-bx+2<0 的解集为 1<x<2，求 a、b。',
+    ];
+    return `[变式训练 ${displayNumber(index)}] ${math[index % math.length]}`;
   }
   if (subject === '物理') {
     return `[变式训练 ${displayNumber(index)}] 一个 2kg 物体在水平面上受 10N 拉力，动摩擦因数为 0.2，g=10m/s²。求摩擦力和加速度。`;
@@ -173,18 +187,16 @@ const repairReinforcementQuestion = (
   const sourceText = source || `${subject}${wp.title}`;
   const repairedQuestion = looksGarbled(question.question) || question.question.length < 20 || isAbstractPracticeStem(question.question)
     ? buildConcreteReinforcementStem(wp, subject, index)
-    : question.question.includes(sourceText.slice(0, 12))
-      ? question.question
-      : `${question.question}（资料依据：“${sourceText}”）`;
+    : question.question;
 
   const answerIsFake = !question.answer || question.answer.trim() === 'A' || looksGarbled(question.answer);
   const steps = [
-    `定位资料依据：“${sourceText.slice(0, 70)}”`,
+    `定位题干条件：“${sourceText.slice(0, 70)}”`,
     relatedWrong ? '对照原错题，找出条件或设问变化' : `明确“${wp.title}”的考查要求`,
     `围绕“${wp.title}”完成推理并写出结论`,
   ];
   const rubric = [
-    `准确写出“${wp.title}”对应资料依据：3分`,
+    `准确写出“${wp.title}”对应题干条件：3分`,
     '分析过程具体，不使用空泛套话：3分',
     '结论与题干条件一致：3分',
     '表达清晰、术语规范：1分',
@@ -266,8 +278,7 @@ const buildMathReinforcement = (
   index: number,
   random: () => number
 ): ReinforcementQuestion => {
-  const seed = random();
-  const baseValue = 15 + Math.floor(seed * 50);
+  random();
   if (/三角函数|sin|cos|tan|象限/.test(`${wp.title} ${wp.description}`)) {
     const trigVariants = [
       { question: '已知 tanA = -5/12，且 A 是第四象限角，求 cosA。', answer: 'cosA = 12/13', steps: ['设 sinA=-5k，cosA=12k', '代入 sin²A+cos²A=1', '得到k=1/13', '第四象限cosA>0，所以cosA=12/13'] },
@@ -282,7 +293,7 @@ const buildMathReinforcement = (
       id: `rq-fallback-${Date.now()}-${index}`,
       knowledgePointTitle: wp.title,
       examPattern: '变式迁移题',
-      question: `[鍙樺紡璁粌 ${displayNumber(index)}] ${variant.question}`,
+      question: `[变式训练 ${displayNumber(index)}] ${variant.question}`,
       answer: variant.answer,
       explanation: `【解析】${variant.steps.join('；')}。`,
       hint: '提示：先写出同角三角函数基本关系，再结合象限判断正负号。',
@@ -296,12 +307,31 @@ const buildMathReinforcement = (
   }
 
   const variants = [
-    `宸茬煡 x = ${baseValue}锛屾眰 ${wp.title} 鐨勫€糮`,
-    `宸茬煡 y = ${baseValue + 10}锛屾眰 ${wp.title} 鐩稿叧琛ㄨ揪寮忕殑鍊糮`,
-    `璁z = ${baseValue - 5}锛屾眰 ${wp.title} 鐨勭粨鏋渀`,
-    `鑻a = ${baseValue * 2}锛宐 = ${baseValue}锛屾眰 ${wp.title}`,
-    `缁欏畾鍙傛暟涓${baseValue}锛岃绠${wp.title}`,
-    `鍦ㄥ疄闄呮儏澧冧腑鍙傛暟鍙${baseValue + 3}锛屾眰 ${wp.title} 鐨勭粨鏋渀`,
+    {
+      question: '求不等式 x²-5x+6>0 的解集，并说明其与函数 y=x²-5x+6 图像位置的关系。',
+      answer: 'x<2 或 x>3。',
+      steps: ['因式分解 x²-5x+6=(x-2)(x-3)', '抛物线开口向上', '>0 取两根外侧'],
+    },
+    {
+      question: '求不等式 x²-12x+20<0 的解集。',
+      answer: '2<x<10。',
+      steps: ['因式分解 x²-12x+20=(x-2)(x-10)', '抛物线开口向上', '<0 取两根之间'],
+    },
+    {
+      question: '解不等式 2x²-3x-2>0，并写出对应方程的两个根。',
+      answer: 'x<-1/2 或 x>2；对应方程根为 -1/2 和 2。',
+      steps: ['分解 2x²-3x-2=(2x+1)(x-2)', '求根 x=-1/2、x=2', '开口向上，>0 取外侧'],
+    },
+    {
+      question: '解不等式 9x²-6x+1>0，并说明 x=1/3 是否属于解集。',
+      answer: 'x≠1/3，即 x<1/3 或 x>1/3；x=1/3 不属于解集。',
+      steps: ['化为 (3x-1)²>0', '平方大于 0 不能取零点', '排除 x=1/3'],
+    },
+    {
+      question: '已知不等式 ax²-bx+2<0 的解集为 1<x<2，求 a、b。',
+      answer: 'a=1，b=3。',
+      steps: ['由解集知两根为 1、2 且 a>0', '设 ax²-bx+2=a(x-1)(x-2)', '比较系数得 a=1，b=3'],
+    },
   ];
 
   const variant = variants[index % variants.length];
@@ -310,16 +340,11 @@ const buildMathReinforcement = (
     id: `rq-fallback-${Date.now()}-${index}`,
     knowledgePointTitle: wp.title,
     examPattern: ensurePattern(wp.examPatterns?.[0]),
-    question: `[变式训练 ${displayNumber(index)}] ${variant}，下列计算结果正确的是（  ）`,
-    answer: buildConcreteReinforcementAnswer(wp, relatedWrong, wp.sourceEvidence || wp.description || wp.title),
-    explanation: `【解题思路】${wp.description?.slice(0, 100) || wp.title}。${wp.formulas?.[0] ? `【公式】${wp.formulas[0]}。` : ''}【关键步骤】${ensureString(wp.keyMethods?.[0], '按公式代入计算')}`,
-    hint: `提示：注意ensureString(wp.keyMethods?.[0], '公式的适用条件')}，先判断再计算。`,
-    solutionSteps: [
-      `识别 ${wp.title} 的核心要点`,
-      ensureString(wp.keyMethods?.[0], '根据已知条件列出相关公式'),
-      ensureString(wp.commonMistakes?.[0], '按正确步骤代入计算'),
-      '检验结果正确性',
-    ],
+    question: `[变式训练 ${displayNumber(index)}] ${variant.question}`,
+    answer: variant.answer,
+    explanation: `【解析】${variant.steps.join('；')}。本题必须根据当前不等式或参数条件重新计算，不能套用上一题答案。`,
+    hint: '提示：先求对应方程的根，再结合抛物线开口方向判断解集。',
+    solutionSteps: variant.steps,
     scoringRubric: [
       '正确识别考点：2分',
       '选择正确方法：3分',

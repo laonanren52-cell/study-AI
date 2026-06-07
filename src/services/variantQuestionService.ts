@@ -1,6 +1,7 @@
 import type { Difficulty, QuizQuestion } from '../types';
 import type { MaterialProfile } from './materialTopicService';
 import { normalizedStemHash, verifyQuestionAgainstProfile } from './questionTopicVerifier';
+import { isSimilarQuestion } from './questionQualityGate';
 
 interface VariantParams {
   baseQuestion: QuizQuestion;
@@ -79,10 +80,13 @@ export function generateVariantQuestions({
         ? geographyVariants(baseQuestion, materialProfile, difficulty)
         : [];
   const seen = new Set([baseQuestion, ...existingQuestions].map((question) => normalizedStemHash(question.question)));
+  const stems = [baseQuestion, ...existingQuestions].map((question) => question.question);
   return pool.filter((question) => {
     const review = verifyQuestionAgainstProfile(question, materialProfile, seen);
     if (!review.passed) return false;
+    if (stems.some((stem) => isSimilarQuestion(stem, question.question))) return false;
     seen.add(question.normalizedStemHash || normalizedStemHash(question.question));
+    stems.push(question.question);
     return true;
   }).slice(0, count);
 }

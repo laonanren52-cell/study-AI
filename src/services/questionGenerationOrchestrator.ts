@@ -978,7 +978,7 @@ function shapeFallbackQuestionForSlot(
   if (type === 'single') {
     return {
       ...base,
-      question: `${modePrefix}${scenario}资料依据：“${sourceBasis}”。${plainStem}`,
+      question: `${modePrefix}${scenario}已知条件：“${sourceBasis}”。${plainStem}`,
       options: question.options,
       answer: objectiveAnswer,
       correctOptionLabel: question.correctOptionLabel,
@@ -990,10 +990,10 @@ function shapeFallbackQuestionForSlot(
     const isTrue = absoluteIndex % 2 === 0;
     const statement = isTrue
       ? `${kpTitle}需要结合资料中的具体条件判断，不能只凭关键词作答`
-      : `${kpTitle}只要记住名称即可，不需要回到资料条件中验证`;
+      : `${kpTitle}在不同题干条件下得到的结论一定完全相同`;
     return {
       ...base,
-      question: `${modePrefix}${scenario}判断正误：资料依据为“${sourceBasis}”。${statement}。（正确/错误）`,
+      question: `${modePrefix}${scenario}判断正误：已知条件为“${sourceBasis}”。${statement}。（正确/错误）`,
       options: undefined,
       answer: isTrue ? '正确' : '错误',
       correctOptionLabel: undefined,
@@ -1004,7 +1004,7 @@ function shapeFallbackQuestionForSlot(
   if (type === 'fill') {
     return {
       ...base,
-      question: `${modePrefix}${scenario}填空：资料依据“${sourceBasis}”表明，解决“${kpTitle}”相关题目时，应先抓住的关键条件是____。`,
+      question: `${modePrefix}${scenario}填空：已知条件“${sourceBasis}”表明，解决“${kpTitle}”相关题目时，应先抓住的关键条件是____。`,
       options: undefined,
       answer: extractFillAnswer(sourceBasis, kpTitle),
       correctOptionLabel: undefined,
@@ -1013,10 +1013,10 @@ function shapeFallbackQuestionForSlot(
   }
 
   const subjectiveQuestion = type === 'short'
-    ? `${modePrefix}${scenario}简答：阅读资料依据“${sourceBasis}”。请说明“${kpTitle}”在本题情境中的判断依据，并指出一个易错点。`
+    ? `${modePrefix}${scenario}简答：已知条件“${sourceBasis}”。围绕“${kpTitle}”回答一个明确结论，并说明推理过程。`
     : type === 'solution'
-      ? `${modePrefix}${scenario}解答：阅读资料依据“${sourceBasis}”。围绕“${kpTitle}”完成推理或计算，写出结论、过程和检验。原题芯：${plainStem}`
-      : `${modePrefix}${scenario}材料分析：阅读材料“${sourceBasis}”。结合“${kpTitle}”回答：材料中的关键条件是什么？它如何支持本题结论？`;
+      ? `${modePrefix}${scenario}解答：已知条件“${sourceBasis}”。围绕“${kpTitle}”完成推理或计算，写出结论、过程和检验。原题芯：${plainStem}`
+      : `${modePrefix}${scenario}材料分析：阅读材料“${sourceBasis}”。结合“${kpTitle}”回答明确结论，并说明材料条件如何支持该结论。`;
 
   return {
     ...base,

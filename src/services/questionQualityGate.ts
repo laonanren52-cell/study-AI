@@ -31,6 +31,18 @@ const genericStemPatterns = [
   /请结合资料分析.{0,20}$/,
 ];
 
+const hardBannedStemPatterns = [
+  /资料依据/,
+  /阅读资料依据/,
+  /能结合资料条件完成具体判断/,
+  /只要记住名称即可/,
+  /不需要回到资料条件中验证/,
+  /请说明.{0,30}判断依据/,
+  /指出一个易错点/,
+  /写出关键条件、判断过程和结论/,
+  /围绕.{0,30}完成知识点强化/,
+];
+
 const concreteSignals = [
   /\d/,
   /[A-Za-z]\s*[=<>]/,
@@ -134,6 +146,9 @@ export function evaluateQuestionQuality(
   if (question.subject && question.subject !== materialProfile.subject) {
     return { passed: false, reason: `题目学科${question.subject}与资料学科${materialProfile.subject}不一致`, level: 'hard' };
   }
+  if (hardBannedStemPatterns.some((pattern) => pattern.test(stem))) {
+    return { passed: false, reason: '题干包含空泛模板表达', level: 'hard' };
+  }
   if (!answer) return { passed: false, reason: '标准答案为空', level: 'hard' };
   if (!hasCoreConceptMatch(question, materialProfile)) {
     return { passed: false, reason: '题目与上传资料核心知识点关联较弱，需要补充资料依据', level: 'soft' };
@@ -151,7 +166,7 @@ export function evaluateQuestionQuality(
     return { passed: false, reason: '题目缺少具体材料、数据、条件、句子、实验、区域或事件', level: 'soft' };
   }
   if (materialProfile.subject === '数学' && !hasMathConcreteExpression(stem)) {
-    return { passed: false, reason: '数学题缺少具体公式、函数、方程、不等式或计算条件', level: 'soft' };
+    return { passed: false, reason: '数学题缺少具体公式、函数、方程、不等式或计算条件', level: 'hard' };
   }
   if (explanation.length < 30) return { passed: false, reason: '解析少于30字，不能指导学生', level: 'soft' };
   if (!sourceBasis) return { passed: false, reason: '资料依据为空', level: 'soft' };
@@ -178,7 +193,7 @@ export function filterQuestionsByQualityGate<T extends QualityGateQuestion>(
     }
 
     const normalized = normalizeQuestionStem(question.question || '');
-    const isSimilar = seen.some((previous) => previous === normalized || stemSimilarity(previous, normalized) >= 0.9);
+    const isSimilar = seen.some((previous) => previous === normalized || isSimilarQuestion(previous, normalized));
     if (isSimilar) {
       console.warn('[题目质量门] 已拦截题目: 多道题题干结构高度相似', question.question);
       continue;
@@ -205,4 +220,15 @@ const stemSimilarity = (left: string, right: string): number => {
   if (!leftPairs.size || !rightPairs.size) return 0;
   const overlap = [...leftPairs].filter((pair) => rightPairs.has(pair)).length;
   return (2 * overlap) / (leftPairs.size + rightPairs.size);
+};
+
+const stripNumbers = (text: string): string =>
+  normalizeQuestionStem(text).replace(/#/g, '').replace(/[一二三四五六七八九十]/g, '');
+
+export const isSimilarQuestion = (left: string, right: string): boolean => {
+  const leftNoNumbers = stripNumbers(left);
+  const rightNoNumbers = stripNumbers(right);
+  if (!leftNoNumbers || !rightNoNumbers) return false;
+  if (leftNoNumbers === rightNoNumbers) return true;
+  return stemSimilarity(leftNoNumbers, rightNoNumbers) > 0.7;
 };
